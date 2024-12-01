@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "BaseCharacter.h"
 #include "Logging/LogMacros.h"
 #include "ProjectDemonCharacter.generated.h"
 
@@ -16,7 +16,7 @@ struct FInputActionValue;
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
 UCLASS(config=Game)
-class AProjectDemonCharacter : public ACharacter
+class AProjectDemonCharacter : public ABaseCharacter
 {
 	GENERATED_BODY()
 
@@ -49,8 +49,7 @@ public:
 	
 
 protected:
-	/**Handles timer for class */
-	FTimerHandle timerHandler;
+	
 
 	/** Called for movement input */
 	virtual void Move(const FInputActionValue& Value);
@@ -66,8 +65,6 @@ protected:
 
 	void ResetCollision();
 			
-	TArray<AActor*> actorsToIgnore;
-
 protected:
 	// APawn interface
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -103,23 +100,7 @@ public:
 	UFUNCTION()
 		void launchCharacterUp();
 
-	void Log(FString log, bool printToScreen = true);
-	float PlayMontage(UAnimMontage* Montage, FName Section = "Default", float rate = 1.0, bool bEnaleLowerArmAnim = false);
-	bool SphereTrace(FVector StartPoint, FVector EndPoint, float sphereRadius, ETraceTypeQuery traceTypeQuery, TArray<AActor*> ActorsToIgnore, int trace, FHitResult& HitResult, bool traceComplex = false, bool ignoreSelf = true);
-	bool SphereTrace(FVector StartPoint, FVector EndPoint, float sphereRadius, ETraceTypeQuery traceTypeQuery, int trace, FHitResult& HitResult, bool traceComplex = false, bool ignoreSelf = true);
-
-	bool SphereTraceMulti(FVector StartPoint, FVector EndPoint, float sphereRadius, ETraceTypeQuery traceTypeQuery, int trace, TArray<FHitResult>& HitResults, bool traceComplex = false, bool ignoreSelf = true);
-
-
-	
-	//Will move and rotate the character over a certain time
-	void MoveCharacterToRotationAndLocationIninterval(FVector TargetRelativeLocation, FRotator TargetRelativeRotation, float OverTime);
-
 	virtual FVector GetInputDirection();
-
-	//Will return the time in anim sequence to get the time. If it cannot find it it will return -1.0
-	UFUNCTION()
-	float getMontageAnimNotifyTime(const UAnimMontage* Mont, FString notifyName, FString notifyPrefix = "AnimNotify_");
 
 };
 

@@ -119,6 +119,8 @@ private:
 	UPROPERTY(EditAnywhere, Category = Combat)
 	TArray<UAnimMontage*> FreeflowAttackMontageArray;
 	UPROPERTY(EditAnywhere, Category = Combat)
+	UAnimMontage* LauncherMontage;
+	UPROPERTY(EditAnywhere, Category = Combat)
 	int currentAttackIndex = 0;
 	bool playerCanAttck = true;
 	bool playerCanDodge = true;

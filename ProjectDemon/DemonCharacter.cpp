@@ -378,7 +378,7 @@ void ADemonCharacter::Move(const FInputActionValue& Value)
 	MovingRightValue = MovementVector.X;
 
 	//Super::Move(Value);
-	Log("Input value magnitude: " + FString::SanitizeFloat(inputVal));
+	//Log("Input value magnitude: " + FString::SanitizeFloat(inputVal));
 	Value.GetValueType();
 
 	if (Value.GetValueType() == EInputActionValueType::Axis2D)
