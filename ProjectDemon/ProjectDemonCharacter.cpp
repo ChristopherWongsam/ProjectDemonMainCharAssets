@@ -81,9 +81,7 @@ void AProjectDemonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerIn
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
 		
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AProjectDemonCharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-
+		// 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AProjectDemonCharacter::Move);
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &AProjectDemonCharacter::onMoveEnd);
@@ -101,6 +99,8 @@ void AProjectDemonCharacter::onMoveEnd(const FInputActionValue& Value)
 	Log("Move ended.");
 	MovingForwardValue = 0.0;
 	MovingRightValue = 0.0;
+
+	isRotationSpeedSet = false;
 }
 void AProjectDemonCharacter::Move(const FInputActionValue& Value)
 {
@@ -108,7 +108,7 @@ void AProjectDemonCharacter::Move(const FInputActionValue& Value)
 	FVector2D MovementVector = Value.Get<FVector2D>();
 	MovingForwardValue = MovementVector.Y;
 	MovingRightValue = MovementVector.X;
-
+	
 	if (Controller != nullptr)
 	{
 		// find out which way is forward
@@ -152,13 +152,13 @@ void AProjectDemonCharacter::MoveForward(float Value)
 		auto newDirection = FRotationMatrix(YawRoration).GetUnitAxis(EAxis::X);
 		auto otherdir = UKismetMathLibrary::MakeRotator(0, 0, GetActorRotation().Yaw);
 		auto dir = Value * newDirection + UKismetMathLibrary::GetForwardVector(otherdir);
+
 		AddMovementInput(dir, 1);
 	}
 }
 
 void AProjectDemonCharacter::MoveRight(float Value)
 {
-	MovingRightValue = Value;
 	float ViewController = Controller->GetControlRotation().Yaw;;
 	if (Value != 0.0)
 	{
@@ -172,19 +172,17 @@ void AProjectDemonCharacter::MoveRight(float Value)
 	}
 }
 
+float AProjectDemonCharacter::getSpeed()
+{
+	return GetCharacterMovement()->Velocity.Size();
+}
 bool AProjectDemonCharacter::getMovementInputReceived()
 {
-	return GetCharacterMovement()->Velocity.Size() > 0.0;
+	return MovingForwardValue != 0.0 || MovingRightValue != 0.0;
 }
-
-bool AProjectDemonCharacter::bInAir() const
+bool AProjectDemonCharacter::InAir() const
 {
 	return GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Falling || GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Flying;
-}
-
-void AProjectDemonCharacter::StartJumping()
-{
-	Log("Jump button pressed.");
 }
 
 void AProjectDemonCharacter::launchCharacterUp()
@@ -199,13 +197,21 @@ void AProjectDemonCharacter::ResetCollision()
 	GetCameraBoom()->bDoCollisionTest = true;
 }
 
+void AProjectDemonCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+}
+
 FVector AProjectDemonCharacter::GetInputDirection()
 {
-	auto RightDirectRot = UKismetMathLibrary::MakeRotator(0, 0, GetControlRotation().Yaw);
-	auto ForwardDirectRot = RightDirectRot;
-	auto RightDirectVect = UKismetMathLibrary::GetRightVector(RightDirectRot);
-	auto ForwardDirectVect = UKismetMathLibrary::GetForwardVector(ForwardDirectRot);
-	auto InputDirection = RightDirectVect * MovingRightValue * 250 + ForwardDirectVect * MovingForwardValue * 250; 
+	auto followCamera = GetFollowCamera();
+	auto rot = UKismetMathLibrary::MakeRotator(0, 0, GetFollowCamera()->GetComponentRotation().Yaw);
+	auto forwVect = UKismetMathLibrary::GetForwardVector(rot);
+	auto rightVector = UKismetMathLibrary::GetRightVector(rot);
+	auto ForwardVect = forwVect * MovingForwardValue;
+	auto RightVect = rightVector * MovingRightValue;
+	auto InputDirection = ForwardVect + RightVect;
 	InputDirection.Normalize();
+
 	return InputDirection;
 }

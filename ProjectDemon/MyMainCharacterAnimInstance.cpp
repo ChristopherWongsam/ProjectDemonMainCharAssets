@@ -14,7 +14,6 @@ void UMyMainCharacterAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
 	Owner = TryGetPawnOwner();
-	ProjectedTimeInAir = 2 * (1200 / GetWorld()->GetGravityZ());
 
 	if (!Owner)
 	{
@@ -27,13 +26,9 @@ void UMyMainCharacterAnimInstance::NativeInitializeAnimation()
 		{
 			UKismetSystemLibrary::PrintString(this, "Successful Instanciation of charcter!");
 		}
-		GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::startBlink, 1.0);
+		startBlink();
 	}
 }
-
-
-
-
 
 void UMyMainCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
@@ -41,71 +36,22 @@ void UMyMainCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	if (MyChar == nullptr)
 	{
 		MyChar = Cast<ADemonCharacter>(TryGetPawnOwner());
+		return;
 	}
-	if (MyChar)
+	bIsMoving = MyChar->getSpeed() > 0.0;
+	if (bIsMoving)
 	{
-		bIsMoving = MyChar->getMovementInputReceived();
-		if (bIsMoving)
-		{
-			//UKismetSystemLibrary::PrintString(this, "Character is moving");
-		}
-		bIsFalling = MyChar->bInAir();
-		if (bIsFalling)
-		{
-			//UKismetSystemLibrary::PrintString(this, "Character is Falling");
-		}
+		//UKismetSystemLibrary::PrintString(this, "Character is moving");
 	}
-}
-void UMyMainCharacterAnimInstance::manageLimbLookAt(float DeltaTime)
-{
-	if (bEnableRightArmLookAt)
+	bIsFalling = MyChar->InAir();
+	if (bIsFalling)
 	{
-		if (RighArmLookAtLocationPtr)
-		{
-			RighArmLookAtLocation = *(RighArmLookAtLocationPtr);
-		}
+		//UKismetSystemLibrary::PrintString(this, "Character is Falling");
 	}
-	if (bEnableLefttArmLookAt)
-	{
-		if (bEnableLefttArmLookAtPtr)
-		{
-			LeftArmLookAtLocation = *(LeftArmLookAtLocationPtr);
-		}
-	}
-	if (bEnableLeftLegLookAt)
-	{
-		if (LeftLegLookAtLocationPtr)
-		{
-			LeftLegLookAtLocation = *(LeftLegLookAtLocationPtr);
-		}
-	}
-	if (bEnableRightLegLookAt)
-	{
-		if (RightLegLookAtLocationPtr)
-		{
-			RightLegLookAtLocation = *(RightLegLookAtLocationPtr);
-		}
-	}
-}
-void UMyMainCharacterAnimInstance::SetLeftFootEffectorLocation(FVector NewEffectorLocation)
-{
-	LeftFootEffectorLocation = NewEffectorLocation;
-}
-
-void UMyMainCharacterAnimInstance::SetRightFootEffectorLocation(FVector NewEffectorLocation)
-{
-	RightFootEffectorLocation = NewEffectorLocation;
-
-}
-
-void UMyMainCharacterAnimInstance::SetLeftFootAlpha(float NewAlpha)
-{
-	LeftFootAlpha = NewAlpha;
-}
-
-void UMyMainCharacterAnimInstance::SetRightFootAlpha(float NewAlpha)
-{
-	RightFootAlpha = NewAlpha;
+	bJumpButtonIsPressed = MyChar->getJumpButtonisPressed();
+	bCharacterLanded = MyChar->getCharacterLanded();
+	Speed = MyChar->getSpeed();
+	bRunJumpCycle = MyChar->bCycleRunnigJumpMirror;
 }
 
 FVector UMyMainCharacterAnimInstance::CalculateLaunchVelocity(UAnimSequence* Sequence)
@@ -137,24 +83,6 @@ void UMyMainCharacterAnimInstance::AimOffset(const FVector& Location, const FRot
 		MyChar->GetCharacterMovement()->bUseControllerDesiredRotation = false;
 	}
 	return;
-}
-
-void UMyMainCharacterAnimInstance::LimbLookAt(FVector Target)
-{
-	if (!bEnableLimbLookAt)
-	{
-		return;
-	}
-	LimbLookAtLocation = Target;
-}
-
-void UMyMainCharacterAnimInstance::LimbLookAt(FName BoneName)
-{
-}
-
-void UMyMainCharacterAnimInstance::EnableRightArmLookAt(bool enableLookAt)
-{
-	bEnableRightArmLookAt = enableLookAt;
 }
 
 float UMyMainCharacterAnimInstance::PauseAnimMontage(float length, bool allowFunctionOverride)
@@ -198,18 +126,29 @@ void UMyMainCharacterAnimInstance::ResumeMont(float rate)
 	Montage_SetPlayRate(GetCurrentActiveMontage(), rate);
 }
 
-void UMyMainCharacterAnimInstance::DisableLimbLookAt()
-{
-	bEnableRightArmLookAt = false;
-	bEnableLeftLegLookAt = false;
-	bEnableLefttArmLookAt = false;
-	bEnableRightLegLookAt = false;
-}
+
 
 void UMyMainCharacterAnimInstance::startBlink()
 {
 
-	GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::startBlink, 1.0);
+	GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::Blink, 1.0);
+}
+
+void UMyMainCharacterAnimInstance::Blink()
+{
+	if (bEyesClosed)
+	{
+		float T = UKismetMathLibrary::RandomFloatInRange(5.0, 7.0);
+		bEyesClosed = !bEyesClosed;
+		SetMorphTarget("EyesClosedCurve", 0.0);
+		GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::Blink, T);
+		return;
+	}
+	float T = UKismetMathLibrary::RandomFloatInRange(0.2, 0.5);
+	SetMorphTarget("EyesClosedCurve", 1.0);
+	bEyesClosed = !bEyesClosed;
+	GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::Blink, T);
+	return;
 }
 
 float UMyMainCharacterAnimInstance::getAnimNotifyTime(UAnimSequence* animSequence, FString notifyNmae, FString notifyPrefix)

@@ -19,7 +19,7 @@ UCLASS(config=Game)
 class AProjectDemonCharacter : public ABaseCharacter
 {
 	GENERATED_BODY()
-
+public:
 	/** Camera boom positioning the camera behind the character */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	USpringArmComponent* CameraBoom;
@@ -61,9 +61,9 @@ protected:
 
 	void MoveRight(float Value);
 
-	void Delay(float duration, FName funcName);
-
 	void ResetCollision();
+
+	void Landed(const FHitResult& Hit) override;
 			
 protected:
 	// APawn interface
@@ -89,18 +89,24 @@ public:
 public:
 	//Getters
 
+	float getSpeed();
+
 	/** Returns any movment input is received **/
 	bool getMovementInputReceived();
 
-	bool bInAir() const;
-
-	/** This will initiate the jump animation **/
-	void StartJumping() ;
+	bool InAir() const;
 
 	UFUNCTION()
-		void launchCharacterUp();
+	void launchCharacterUp();
 
 	virtual FVector GetInputDirection();
 
+public:
+	UPROPERTY(EditAnywhere, Category = Movement)
+	UAnimMontage* TurnRightMontage;
+	UPROPERTY(EditAnywhere, Category = Movement)
+	UAnimMontage* TurnBackMontage;
+
+	bool isRotationSpeedSet = false;
 };
 

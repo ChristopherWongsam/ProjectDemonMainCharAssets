@@ -4,7 +4,15 @@
 #include "BaseCharacter.h"
 #include <Kismet/KismetSystemLibrary.h>
 #include <Kismet/GameplayStatics.h>
+#include "GameFramework/CharacterMovementComponent.h"
 #include <Runtime/Engine/Private/InterpolateComponentToAction.h>
+
+void ABaseCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	defaultGravityScale = GetCharacterMovement()->GravityScale;
+	defaultAirControl = GetCharacterMovement()->AirControl;
+}
 
 void ABaseCharacter::Log(FString log, bool printToScreen)
 {
@@ -29,6 +37,19 @@ void ABaseCharacter::Delay(float duration, FName funcName)
 		Delegate, // function to call on elapsed
 		duration, // float delay until elapsed
 		false); // looping?
+}
+void ABaseCharacter::setCanCancelAnimMontage(bool canCancelAnimMontage)
+{
+	bCanCancelAnimMontage = canCancelAnimMontage;
+}
+bool ABaseCharacter::getCanCancelAnimMontage()
+{
+	return bCanCancelAnimMontage;
+}
+void ABaseCharacter::ResetMovementComponentValues()
+{
+	GetCharacterMovement()->GravityScale = defaultGravityScale;
+	GetCharacterMovement()->AirControl = defaultAirControl;
 }
 float ABaseCharacter::getMontageAnimNotifyTime(const UAnimMontage* Mont, FString notifyNmae, FString notifyPrefix)
 {
@@ -62,6 +83,7 @@ float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float ra
 {
 	if (Montage)
 	{
+		bCanCancelAnimMontage = false;
 		Log("Valid montage!");
 		auto T = GetMesh()->GetAnimInstance()->Montage_Play(Montage, rate);
 		GetMesh()->GetAnimInstance()->Montage_JumpToSection(Section, Montage);
@@ -167,6 +189,55 @@ void ABaseCharacter::MoveCharacterToRotationAndLocationIninterval(FVector Target
 			}
 		}
 	}
-	//UKismetSystemLibrary::MoveComponentTo(GetRootComponent(), TargetRelativeLocation, TargetRelativeRotation, true, true, OverTime, false, EMoveComponentAction::Type::Move, LatentInfo);
+}
+
+void ABaseCharacter::cancelMoveCharacterToRotationAndLocationIninterval()
+{
+	FLatentActionManager& LatentActionManager = GetWorld()->GetLatentActionManager();
+}
+float ABaseCharacter::newValueFromChange(float currentValue, float newValue)
+{
+	if (newValue == 0.0)
+	{
+		return currentValue;
+	}
+	if (TimeInterpValue != newValue)
+	{
+		if (TimeInterpValue == 0.0)
+		{
+			TimeInterpValue = newValue;
+		}
+		auto ratio = currentValue / TimeInterpValue;
+		auto NewCurrentTime = ratio * newValue;
+		TimeInterpValue = newValue;
+		return NewCurrentTime;
+	}
+	return currentValue;
+}
+float ABaseCharacter::InterpValueTime(float currentValue, float targetValue, float DeltaTime)
+{
+	float newVal = newValueFromChange(currentValue, targetValue);
+	if (newVal == targetValue)
+	{
+		return newVal;
+	}
+	else if (currentValue < targetValue)
+	{
+		newVal += DeltaTime;
+		if (currentValue > targetValue)
+		{
+			newVal = targetValue;
+		}
+		return newVal;
+	}
+	else
+	{
+		newVal -= DeltaTime;
+		if (newVal < targetValue)
+		{
+			newVal = targetValue;
+		}
+		return newVal;
+	}
 }
 
