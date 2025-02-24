@@ -2,7 +2,6 @@
 
 
 #include "Enemy.h"
-#include "EnemyAIController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "AIController.h"
@@ -45,11 +44,22 @@ void AEnemy::BeginPlay()
 	{
 		return;
 	}
+	EnemyAnimInstance = Cast<UEnemyAnimInstance>(GetMesh()->GetAnimInstance());
 }
 void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	StartHitbox(DeltaTime, true,true);
+	updateCharacterRotationToTarget(DeltaTime);
+}
+
+void AEnemy::LogScreen(FString log, FLinearColor color)
+{
+	Super::LogScreen(log, FLinearColor::Red);
+}
+void AEnemy::Log(FString log, bool printToScreen)
+{
+	Super::Log(log, printToScreen);
 }
 void AEnemy::enableOutline(bool enableOutline)
 {
@@ -84,29 +94,26 @@ float AEnemy::Attack()
 
 void AEnemy::StartHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug)
 {
+	
 	if (!bEnableHitBox)
 	{
 		return;
 	}
-
+	LogScreen("Hitbox update");
+	if (!GetIsAttackAnimationPlaying())
+	{
+		return;
+	}
 	//Should be one of the hand locations
 	FName SocketName = "";
 	TArray<FString> AttackTags;
 	bool bEnableLeftKick = false;
 	bool bEnableLeftPunch = false;
 	bool bEnableRightKick = false;
-	if (GetIsAttackAnimationPlaying())
-	{
-		FString str = *AttackMontageMap.Find(GetCurrentMontage());
-		str.ParseIntoArray(AttackTags, TEXT(","), true);
-		bEnableRightPunch = str.Contains("Right") && str.Contains("Punch");
-		bEnableRightKick = str.Contains("Right") && str.Contains("Kick");
-		bEnableLeftKick = str.Contains("Left") && str.Contains("Kick");
-		bEnableLeftPunch = str.Contains("Left") && str.Contains("Punch");
-	}
-
-	bool containsAllSockets = GetMesh()->GetAllSocketNames().Contains(RightHandSocketName) && GetMesh()->GetAllSocketNames().Contains(LeftHandSocketName) &&
-		GetMesh()->GetAllSocketNames().Contains(RightFootSocketName) && GetMesh()->GetAllSocketNames().Contains(LeftHandSocketName);
+	bool bEnableRightWeapon = false;
+	
+	LogScreen("Hitbox update");
+	bool containsAllSockets = GetMesh()->GetAllSocketNames().Contains(RightWeaponSocketInitialPoint) && GetMesh()->GetAllSocketNames().Contains(RightWeaponSocketFinalPoint);
 
 	if (!containsAllSockets)
 	{
@@ -114,26 +121,26 @@ void AEnemy::StartHitbox(float deltaTime, bool bEnableRightPunch, bool enableDeb
 		return;
 	}
 
-	if (bEnableRightPunch)
+	SwordHitbox(RightWeaponSocketInitialPoint, RightWeaponSocketFinalPoint);
+}
+
+void AEnemy::updateCharacterRotationToTarget(float deltaTime, FVector targetLocation, bool enableDebug)
+{
+	if (!MyPlayerCharacter)
 	{
-		SocketName = RightHandSocketName;
-		AttackHitbox(SocketName);
+		return;
 	}
-	if (bEnableLeftPunch)
+	if(!getEnableCharacterTargetRoataion())
+	{ 
+		return;
+	}
+	float newYaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
+	if (!targetLocation.Equals(FVector::ZeroVector))
 	{
-		SocketName = LeftHandSocketName;
-		AttackHitbox(SocketName);
+		newYaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), targetLocation).Yaw;
 	}
-	if (bEnableLeftKick)
-	{
-		SocketName = LeftFootSocketName;
-		AttackHitbox(SocketName);
-	}
-	if (bEnableRightKick)
-	{
-		SocketName = RightFootSocketName;
-		AttackHitbox(SocketName);
-	}
+	FRotator newRot(0, newYaw, 0);
+	SetActorRotation(newRot);
 	
 }
 
@@ -176,7 +183,34 @@ void AEnemy::AttackHitbox(FName SocketName)
 			{
 				actorsHit.Add(enemy);
 				enemy->HitReact(this);
+				Log("Main Character hit");
 				DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
+			}
+		}
+	}
+}
+void AEnemy::SwordHitbox(FName SocketInitName, FName SocketFinalName)
+{
+	FVector AttackInitPoint = GetMesh()->GetSocketLocation(SocketInitName);
+	FVector AttackFinalPoint = GetMesh()->GetSocketLocation(SocketFinalName);
+
+	auto radius = 50;
+
+	FHitResult hitResult;
+
+	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
+	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, AttackInitPoint, AttackFinalPoint, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
+	if (didHit)
+	{
+		if (ADemonCharacter* enemy = Cast<ADemonCharacter>(hitResult.GetActor()))
+		{
+			if (!actorsHit.Contains(enemy))
+			{
+				actorsHit.Add(enemy);
+				enemy->HitReact(this);
+				Log("Main Character hit");
+				//DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
 			}
 		}
 	}
@@ -189,6 +223,10 @@ float AEnemy::HitReact(AActor* sender)
 		Log("Enemy hit react montage array empty");
 		return 0.0;
 	}
+	if (GetCurrentMontage())
+	{
+		StopAnimMontage(GetCurrentMontage());
+	}
 	auto vector = GetActorLocation() - sender->GetActorLocation();
 	FName sectionName = "Default";
 	vector.Normalize();
@@ -197,21 +235,11 @@ float AEnemy::HitReact(AActor* sender)
 	{
 		sectionName = "HitBack";
 	}
-	if (HitReactMontageArray.IsValidIndex(hitReactionCounter))
-	{
-		index = hitReactionCounter;
-	}
-	else
-	{
-		hitReactionCounter = 0;
-	}
 	auto hitReactMontage = HitReactMontageArray[index];
+	float T = PlayMontage(hitReactMontage,sectionName);
 	FOnMontageEnded BlendOutDelegate;
 	BlendOutDelegate.BindUObject(this, &AEnemy::HitReactEnd);
 	GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, hitReactMontage);
-	float T = PlayMontage(hitReactMontage,sectionName);
-	bEnableMirrorAnimation = !bEnableMirrorAnimation;
-	hitReactionCounter++;
 	if (ACharacter* character = Cast<ACharacter>(sender))
 	{
 		auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), character->GetActorLocation()).Yaw;
@@ -230,24 +258,18 @@ void AEnemy::HitReactEnd(UAnimMontage* animMontage, bool bInterrupted)
 {
 	if (bInterrupted)
 	{
+		bEnableMirrorAnimation = !bEnableMirrorAnimation;
 
 	}
 	else
 	{
-		hitReactionCounter = 0;
+		Log("Enemy hit react end");
+		bEnableMirrorAnimation = false;
+
 	}
 }
 
-void AEnemy::setEnableHitbox(bool enableHitbox)
-{
-	bEnableHitBox = enableHitbox;
-}
 
-void AEnemy::RestartHitbox()
-{
-	actorsHit.Empty();
-	setEnableHitbox(false);
-}
 
 void AEnemy::ChasePlayer()
 {
@@ -261,5 +283,5 @@ bool AEnemy::GetIsAttackAnimationPlaying()
 	{
 		return false;
 	}
-	return AttackMontageMap.Contains(GetCurrentMontage());
+	return GetCurrentMontage() == LightAttack;
 }

@@ -16,6 +16,7 @@ class PROJECTDEMON_API UBTTask_EnemyBase : public UBTTask_BlackboardBase
 	GENERATED_BODY()
 public:
 	class AEnemy* Enemy;
+	ACharacter* MyPlayerCharacter;
 protected:
 	virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
 };

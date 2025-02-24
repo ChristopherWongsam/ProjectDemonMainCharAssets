@@ -151,7 +151,7 @@ void AProjectDemonCharacter::MoveForward(float Value)
 		auto YawRoration = FRotator(0.0, ViewController, 0.0);
 		auto newDirection = FRotationMatrix(YawRoration).GetUnitAxis(EAxis::X);
 		auto otherdir = UKismetMathLibrary::MakeRotator(0, 0, GetActorRotation().Yaw);
-		auto dir = Value * newDirection + UKismetMathLibrary::GetForwardVector(otherdir);
+		auto dir = Value * newDirection + UKismetMathLibrary::GetForwardVector(otherdir) * MoveForwardStrength;
 
 		AddMovementInput(dir, 1);
 	}
@@ -165,26 +165,15 @@ void AProjectDemonCharacter::MoveRight(float Value)
 		auto YawRoration = FRotator(0.0, ViewController, 0.0);
 		auto newDirection = 1 * FRotationMatrix(YawRoration).GetUnitAxis(EAxis::Y);
 		auto otherdir = UKismetMathLibrary::MakeRotator(0, 0, GetActorRotation().Yaw);
-		auto dir = Value * newDirection;
-		dir = Value * newDirection + UKismetMathLibrary::GetForwardVector(otherdir);
-
+		auto dir = Value * newDirection + UKismetMathLibrary::GetForwardVector(otherdir) * MoveForwardStrength;
+		
 		AddMovementInput(dir, 1);
 	}
-}
-
-float AProjectDemonCharacter::getSpeed()
-{
-	return GetCharacterMovement()->Velocity.Size();
 }
 bool AProjectDemonCharacter::getMovementInputReceived()
 {
 	return MovingForwardValue != 0.0 || MovingRightValue != 0.0;
 }
-bool AProjectDemonCharacter::InAir() const
-{
-	return GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Falling || GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Flying;
-}
-
 void AProjectDemonCharacter::launchCharacterUp()
 {
 	Super::Jump();
@@ -214,4 +203,40 @@ FVector AProjectDemonCharacter::GetInputDirection()
 	InputDirection.Normalize();
 
 	return InputDirection;
+}
+void AProjectDemonCharacter::UpdateCamera(float DeltaTime)
+{
+	if (InAir() && GetVelocity().X == 0.0 && GetVelocity().Y == 0.0)
+	{
+		GetCameraBoom()->CameraLagSpeed = CameraLagAirSpeed;
+	}
+	else
+	{
+		GetCameraBoom()->CameraLagSpeed = CameraLagFloorSpeed;
+	}
+	if (getSpeed() != 0.0)
+	{
+		float Val = 0.0;
+
+		FRotator ControlRotation(0.0, GetControlRotation().Yaw, 0.0);
+
+		FVector ControlRotationForwardVector = UKismetMathLibrary::GetForwardVector(ControlRotation);
+
+		float dotProduct = FVector::DotProduct(ControlRotationForwardVector, GetInputDirection());
+		dotProduct = FMath::Abs(dotProduct);
+
+		dotProduct = 1 - dotProduct;
+
+		float power = FMath::Pow(dotProduct, cameraToPlayerSpeed);
+
+		float totalMovingDirections = FMath::Abs(MovingForwardValue) + FMath::Abs(MovingRightValue);
+		float clampedTotalMovingDirections = UKismetMathLibrary::FClamp(totalMovingDirections, 0.0, 1.0);
+		float clampedDeltaTime = UKismetMathLibrary::FClamp(DeltaTime, 0.0, 1.0);
+
+		Val = power * clampedTotalMovingDirections * clampedDeltaTime * cameraRotationRate * UKismetMathLibrary::NormalizedDeltaRotator(GetInputDirection().Rotation(), GetControlRotation()).Yaw;
+
+		AddControllerYawInput(Val);
+	}
+	
+	
 }

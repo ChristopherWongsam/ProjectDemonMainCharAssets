@@ -48,6 +48,9 @@ public:
 	AProjectDemonCharacter();
 	
 
+public:
+	UPROPERTY(EditAnywhere, Category = Movement)
+	float MoveForwardStrength = 1.0;
 protected:
 	
 
@@ -56,6 +59,7 @@ protected:
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
+
 
 	void MoveForward(float Value);
 
@@ -87,14 +91,12 @@ public:
 	float MovingRightValue = 0;
 
 public:
-	//Getters
-
-	float getSpeed();
+	
 
 	/** Returns any movment input is received **/
 	bool getMovementInputReceived();
 
-	bool InAir() const;
+	
 
 	UFUNCTION()
 	void launchCharacterUp();
@@ -102,11 +104,35 @@ public:
 	virtual FVector GetInputDirection();
 
 public:
+
 	UPROPERTY(EditAnywhere, Category = Movement)
 	UAnimMontage* TurnRightMontage;
 	UPROPERTY(EditAnywhere, Category = Movement)
-	UAnimMontage* TurnBackMontage;
+	UAnimMontage* TurnLeftMontage;
+	UPROPERTY(EditAnywhere, Category = Movement)
+	UAnimMontage* TurnBackLeftMontage;
+	UPROPERTY(EditAnywhere, Category = Movement)
+	UAnimMontage* TurnBackRightMontage;
 
 	bool isRotationSpeedSet = false;
+
+
+	// WIll adjust how the camera returns to normal when moving
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float cameraToPlayerSpeed = 0.5;
+
+	// The control factor of auto camera rotation.
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float cameraRotationRate = 0.6;
+
+	// Camera lag speed when player is walking.
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float CameraLagFloorSpeed = 10.0;
+
+	// Camera lag speed when player is in Air Jumping.
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float CameraLagAirSpeed = 0.2;
+
+	void UpdateCamera(float DeltaTime);
 };
 

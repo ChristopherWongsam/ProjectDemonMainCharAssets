@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "BaseCharacter.h"
+#include "EnemyAIController.h"
+#include "EnemyAnimInstance.h"
 #include "Enemy.generated.h"
 
 /**
@@ -20,12 +22,14 @@ public:
 	bool enemyIsHighlighted();
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void LogScreen(FString log, FLinearColor color = FLinearColor::Blue) override;
+	virtual void Log(FString log, bool printToScreen = true) override;
 	UFUNCTION()
 	virtual void ChasePlayer();
 
-	bool GetIsAttackAnimationPlaying();
+	virtual bool GetIsAttackAnimationPlaying();
 	
-
+	class UEnemyAnimInstance* EnemyAnimInstance;
 	UPROPERTY(EditAnywhere, Category = Combat)
 	float AcceptableAttackRange = 150;
 	UPROPERTY(EditAnywhere, Category = Combat)
@@ -43,9 +47,26 @@ public:
 	UFUNCTION()
 	virtual float Attack();
 
-	bool bEnableHitBox = false;
+	UPROPERTY(EditAnywhere, Category = Combat)
+	FName RightWeaponSocketInitialPoint = "RightWeaponSocketInitialPoint";
+	UPROPERTY(EditAnywhere, Category = Combat)
+	FName RightWeaponSocketFinalPoint = "RightWeaponSocketFinalPoint";
+
 	void StartHitbox(float deltaTime, bool bEnableRightPunch = true, bool enableDebug=false);
+
 	void AttackHitbox(FName SocketName);
+
+	void SwordHitbox(FName SocketInitName, FName SocketFinalName);
+private:
+	bool bEnableCharacterTargetRoataion = false;
+	void updateCharacterRotationToTarget(float deltaTime, FVector targetLocation = FVector(0.0), bool enableDebug = false);
+public:
+	
+	UFUNCTION(BlueprintCallable)
+	void setEnableCharacterToTargetRotation(bool EnableCharacterTargetRoataion) { bEnableCharacterTargetRoataion = EnableCharacterTargetRoataion; }
+	bool getEnableCharacterTargetRoataion() { return bEnableCharacterTargetRoataion; }
+	
+
 	/// <summary>
 	/// Initiates how the character should react based on who is the sender
 	/// </summary>
@@ -53,14 +74,9 @@ public:
 	/// <returns></returns>
 	UFUNCTION()
 	virtual float HitReact(AActor* sender);
-	TArray< AActor*> actorsHit;
 	UFUNCTION()
 	void HitReactEnd(UAnimMontage* animMontage, bool bInterrupted);
-	//Enables hit box. Will only activate if 
-	UFUNCTION(BlueprintCallable)
-	void setEnableHitbox(bool enableHitbox);
-	UFUNCTION(BlueprintCallable)
-	void RestartHitbox();
+	
 	UPROPERTY()
 	class AEnemyAIController* EnemyController;
 	UPROPERTY()
@@ -73,4 +89,6 @@ public:
 	/*Should use enum instead*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Animation)
 	bool bEnableMirrorAnimation = false;
+
+	
 };

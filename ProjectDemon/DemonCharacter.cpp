@@ -11,27 +11,44 @@
 #include "MyMainCharacterAnimInstance.h"
 #include "UObject/UObjectGlobals.h"
 #include "Enemy.h"
+#include "C:/UE_5.4/Engine/Plugins/FX/Niagara/Source/Niagara/Public/NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 
+
+void ADemonCharacter::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	for (int index : MaterialIndexHide)
+	{
+		GetMesh()->ShowMaterialSection(index, 0,false,0);
+	}
+}
 
 void ADemonCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	MainCharacterAnimInstance = Cast<UMyMainCharacterAnimInstance>(GetMesh()->GetAnimInstance());
-	if (MainCharacterAnimInstance)
+	if (!MainCharacterAnimInstance)
 	{
 		Log("Unable to cast MainCharacterAnimInstance");
 	}
-	
+	orignalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	//getRootMotionData(DodgeMontageArray[0]);
 }
 void ADemonCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	Mantle(DeltaTime);
 	SoftLock(DeltaTime);
-	StartHitbox(DeltaTime);
+	//StartHitbox(DeltaTime,true,false);
+	UpdateHitbox(DeltaTime);
 	Swing(DeltaTime,true);
 	UpdateBoost(DeltaTime);
+	UpdateWallclimb(DeltaTime);
+	UpdateMovementRotation(DeltaTime);
+	UpdatePlayerAttack(DeltaTime);
+	UpdateCamera(DeltaTime);
 }
 void ADemonCharacter::DrawInput(float DeltaTime)
 {
@@ -41,6 +58,13 @@ void ADemonCharacter::DrawInput(float DeltaTime)
 	FHitResult Result;
 	UKismetSystemLibrary::DrawDebugArrow(this, start, end, lineThickness, FLinearColor::Yellow);
 }
+
+void ADemonCharacter::UpdateSpeed(float DeltaTime)
+{
+	
+}
+
+
 
 void ADemonCharacter::Mantle(float DeltaTime)
 {
@@ -233,7 +257,7 @@ void ADemonCharacter::StartFreeflow(bool enableDebug)
 		if (FreeflowAttackMontageArray.IsValidIndex(randInt))
 		{
 			//Setting up character movement
-			GetCharacterMovement()->MovementMode = EMovementMode::MOVE_Flying;
+			//GetCharacterMovement()->MovementMode = EMovementMode::MOVE_Flying;
 			GetMovementComponent()->StopMovementImmediately();
 			//Modifying camera collision
 			GetCameraBoom()->bDoCollisionTest = false;
@@ -280,20 +304,49 @@ void ADemonCharacter::canGoToNextfreeflow()
 	}
 	
 }
+void ADemonCharacter::UpdatePlayerAttack(float DeltaTime)
+{
+	if (!MainCharacterAnimInstance->Montage_IsActive(AttackRushMontage))
+	{
+		return;
+	}
+	if (playerEnemy != nullptr)
+	{
+		float distanceFromEnemy = getDistanceFromCharacter(playerEnemy);
+		if(attackRushMinimumDistance >= distanceFromEnemy)
+		{
+			MainCharacterAnimInstance->Montage_Stop(0.2, AttackRushMontage);
+			PlayerAttack();
+		}
+	}
+}
+float ADemonCharacter::getDistanceFromCharacter(ACharacter* character)
+{
+	if (character)
+	{
+		float capsuleRadius = character->GetCapsuleComponent()->GetScaledCapsuleRadius();
+		float totalDistance = FVector::Dist(GetActorLocation(), character->GetActorLocation());
+
+		return  totalDistance - capsuleRadius;
+	}
+	Log("Not valid character");
+	return -1.0;
+}
 void ADemonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	// Jumping
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Started, this, &ADemonCharacter::onMoveStarted);
 		EnhancedInputComponent->BindAction(LeftMouseAction, ETriggerEvent::Started, this, &ADemonCharacter::LeftMouseClick);
 		EnhancedInputComponent->BindAction(LeftShiftAction, ETriggerEvent::Started, this, &ADemonCharacter::ShiftClick);
-		EnhancedInputComponent->BindAction(LeftMouseAction, ETriggerEvent::Started, this, &ADemonCharacter::LeftMouseClick);
 		EnhancedInputComponent->BindAction(LeftCtrltAction, ETriggerEvent::Started, this, &ADemonCharacter::LeftCTRLClick);
 		EnhancedInputComponent->BindAction(LeftCtrltAction, ETriggerEvent::Completed, this, &ADemonCharacter::LeftCTRLClickEnd);
 		EnhancedInputComponent->BindAction(RightMouseAction, ETriggerEvent::Started, this, &ADemonCharacter::RightMouseClick);
 		EnhancedInputComponent->BindAction(RightMouseAction, ETriggerEvent::Completed, this, &ADemonCharacter::RightMouseClickEnd);
+
+		EnhancedInputComponent->BindAction(EPressAction, ETriggerEvent::Completed, this, &ADemonCharacter::EKeyActionPress);
 
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ADemonCharacter::StartJump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ADemonCharacter::StopJumping);
@@ -307,23 +360,34 @@ void ADemonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 void ADemonCharacter::StartJump()
 {
 	
-	if (MainCharacterAnimInstance->Montage_IsActive(JumpLandMontage))
+	if (GetCurrentMontage())
 	{
-		if (getCanCancelAnimMontage())
+		if (GetCurrentMontage() == JumpLandMontage)
 		{
-			
-			MainCharacterAnimInstance->Montage_Stop(0.0, GetCurrentMontage());
+			MainCharacterAnimInstance->Montage_Stop(0.0, JumpLandMontage);
+		}
+	}
+	bJumpButtonIsPressed = true;
+	if (JumpStartMontage)
+	{
+		if (getSpeed() > 0.0)
+		{
+			PlayMontage(JumpStartMontage,"JumpRun");
 		}
 		else
 		{
-			return;
+			PlayMontage(JumpStartMontage);
+		}
+		
+		float time = getMontageAnimNotifyTime(JumpStartMontage, "JumpLaunch");
+		if (time < 0.0)
+		{
+			Super::Jump();
 		}
 	}
-	
-	bJumpButtonIsPressed = true;
-	if (InAir())
+	else
 	{
-		//ToggleBoost(false);
+		Super::Jump();
 	}
 }
 void ADemonCharacter::StopJumping()
@@ -347,7 +411,7 @@ void ADemonCharacter::LeftMouseClick()
 	Log("left mouse click");
 	if (bLeftCtrlButtonIsHeld)
 	{
-		StartFreeflow();
+		//StartFreeflow();
 	}
 	else
 	{
@@ -369,6 +433,7 @@ void ADemonCharacter::RightMouseClickEnd()
 {
 	Log("Right mouse click");
 }
+
 void ADemonCharacter::ToggleBoost(bool reset, bool activate)
 {
 	if (reset)
@@ -481,70 +546,225 @@ void ADemonCharacter::PlayerDodgeEnd(UAnimMontage* animMontage, bool bInterrupte
 }
 void ADemonCharacter::NextDodge()
 {
+	if (DodgeMontageArray.Num() > 0)
+	{
+		Log("Playing next dodge?");
+		//PlayMontage(DodgeMontageArray[0]);
+		
+	}
+	
 	playerCanDodge = true;
 }
 void ADemonCharacter:: PlayerAttack()
 {
-	Log("Player Attack commence");
+	if (getHitReactionMontageIsActive())
+	{
+		Log("Player Hit");
+		return;
+	}
 	if (!playerCanDodge)
 	{
-		Log("Player cannot attack in dodge transition");
+		Log("Player is dodging");
 		return;
 	}
 	if (!playerCanAttck)
 	{
-		Log("Player cannot attack.");
+		Log("Player cannot attack");
 		return;
 	}
-	TArray<UAnimMontage*> upperAttckMontage;
-	AttackMontageMap.GenerateKeyArray(upperAttckMontage);
+	TArray<UAnimMontage*> AttackArray = AttackMontageArray;
 	int AttackIndex = 0;
-;	if (upperAttckMontage.Num() == 0)
+;	if (AttackArray.Num() == 0)
 	{
-		Log("No attack montage.");
+		Log("Empty Attack array");
 		return;
 	}
-	if (upperAttckMontage.IsValidIndex(currentAttackIndex))
+	if (AttackArray.IsValidIndex(currentAttackIndex))
 	{
 		
 		AttackIndex = currentAttackIndex;
 	}
 	else
 	{
-		Log("Attack index is resetting.");
 		currentAttackIndex = 0;
 	}
 	
-	auto attackMontage = upperAttckMontage[AttackIndex];
-	Log("Player will attack");
-	PlayMontage(attackMontage);
-	TArray<FString> AttackTags;
-	if (UAnimMontage* currMont = attackMontage)
-	{
-		FString str = *AttackMontageMap.Find(currMont);
-		Log("The the string found is: " + str);
-		str.ParseIntoArray(AttackTags, TEXT(","), true);
-		Log("The number of tags is: " + FString::FromInt(AttackTags.Num()));
-	}
-	FOnMontageEnded BlendOutDelegate;
-	BlendOutDelegate.BindUObject(this, &ADemonCharacter::PlayerAttackEnd);
-	
-	playerCanAttck = false;
-	GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, attackMontage);
-	currentAttackIndex++;
+	auto attackMontage = AttackArray[AttackIndex];
+
 	if (playerEnemy)
 	{
 		auto rot = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), playerEnemy->GetActorLocation());
 		auto newRot = GetActorRotation();
 		newRot.Yaw = rot.Yaw;
 		float moveToTime = attackMontage->GetDefaultBlendInTime();
-		
-		MoveCharacterToRotationAndLocationIninterval(GetActorLocation(), newRot, moveToTime);
+
+		//MoveCharacterToRotationAndLocationIninterval(GetActorLocation(), newRot, moveToTime);
+		SetActorRotation(newRot);
+		float distanceFromEnemy = getDistanceFromCharacter(playerEnemy);
+		if (distanceFromEnemy > attackRushMinimumDistance && 1)
+		{
+			PlayMontage(AttackRushMontage);
+			BindMontage(AttackRushMontage, "AttackRushEnd");
+			//MainCharacterAnimInstance->bindMontageRootMotionModifier(AttackRushMontage, 0.5);
+			return;
+		}
 	}
+	GetCharacterMovement()->StopMovementImmediately();
+	TArray<FString> AttackTags;
+	if (AttackMontageMap.Contains(attackMontage))
+	{
+		FString str = *AttackMontageMap.Find(attackMontage);
+		str.ParseIntoArray(AttackTags, TEXT(","), true);
+	}
+	else
+	{
+		Log("Montage has no tags");
+	}
+	
+	PlayMontage(attackMontage);
+	if (AttackTags.Contains("MirrorLowerArm"))
+	{
+		Log("Mirroring lower arm");
+		LowerArmState = ELowerArmState::LAS_Mirror;
+	}
+	else if (AttackTags.Contains("DisableLowerArm"))
+	{
+		LowerArmState = ELowerArmState::LAS_Disabled;
+	}
+	else
+	{
+		LowerArmState = ELowerArmState::LAS_Normal;
+	}
+
+	if (AttackTags.Contains("Mirror"))
+	{
+		Log("Miroring charaacter");
+		MainCharacterAnimInstance->setEnableMirror(true);
+
+	}
+	
+	BindMontage(attackMontage, "PlayerAttackEnd");
+
+	playerCanAttck = false;
+	currentAttackIndex++;
+	
+}
+void ADemonCharacter::PlayerAttackEnd(UAnimMontage* animMontage, bool bInterrupted)
+{
+	actorsHit.Empty();
+	bEnableHitBox = false;
+
+	if (bInterrupted)
+	{
+		
+		
+	}
+	else
+	{
+		currentAttackIndex = 0;
+	}
+	LowerArmState = ELowerArmState::LAS_Normal;
+	MainCharacterAnimInstance->setEnableMirror(false);
+	playerCanAttck = true;
+	
+	
+}
+void ADemonCharacter::NextAttack()
+{
+	playerCanAttck = true;
+}
+void ADemonCharacter::onMoveStarted(const FInputActionValue& Value)
+{
+	Log("Move Started");
+	if (GetCurrentMontage())
+	{
+		if (GetCurrentMontage() == TurnLeftMontage || GetCurrentMontage() == TurnRightMontage || 
+			GetCurrentMontage() == TurnBackRightMontage || GetCurrentMontage() == TurnBackLeftMontage)
+		{
+			return;
+		}
+	}
+	FVector2D MovementVector = Value.Get<FVector2D>();
+	MovingForwardValue = MovementVector.Y;
+	MovingRightValue = MovementVector.X;
+
+	bStartCharcterMovementRotation = true;
+	currentCharacterRotationTime = 0.0;
+	targetCurrentRotationTime = 1.0;
+
+	characterInitialYawRotation = GetActorRotation().Yaw;
+	characterFinalYawRotation = GetInputDirection().Rotation().Yaw;
+
+	ETurnState turnState = TurnInPlace(GetInputDirection().Rotation());
+	if (turnState != ETurnState::ETS_None)
+	{
+		switch (turnState) 
+		{
+				case ETurnState::ETS_Left:
+					PlayMontage(TurnLeftMontage);
+					break;
+				case ETurnState::ETS_Right:
+					PlayMontage(TurnRightMontage);
+					break;
+				case ETurnState::ETS_RightHalf:
+					PlayMontage(TurnBackRightMontage);
+					break;
+				case ETurnState::ETS_LeftHalf:
+					PlayMontage(TurnBackLeftMontage);
+					break;
+				default:
+					break;
+		}
+		currentCharacterRotationTime = targetCurrentRotationTime;
+
+		setCanCancelAnimMontage();
+	}
+	else
+	{
+		//Do something?
+	}
+}
+void ADemonCharacter::onMoveEnd(const FInputActionValue& Value)
+{
+	Super::onMoveEnd(Value);
+	//bStartCharcterMovementRotation = false;
+	FVector2D MovementVector = Value.Get<FVector2D>();
+	MovingForwardValue = MovementVector.Y;
+	MovingRightValue = MovementVector.X;
 }
 void ADemonCharacter::Move(const FInputActionValue& Value)
 {
-	Super::Move(Value);
+	// input is a Vector2D
+	FVector2D MovementVector = Value.Get<FVector2D>();
+	MovingForwardValue = MovementVector.Y;
+	MovingRightValue = MovementVector.X;
+
+	if (MovementVector.Length() < 0.5)
+	{
+		return;
+	}
+	
+	bStartCharcterMovementRotation = false;
+	if (Controller != nullptr)
+	{
+		// find out which way is forward
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+		const FRotator XYRotation = FRotator(0, Rotation.Yaw, Rotation.Roll);
+
+		// get forward vector
+		const FVector ForwardDirection = UKismetMathLibrary::GetForwardVector(YawRotation);
+
+		// get right vector 
+		const FVector RightDirection = UKismetMathLibrary::GetRightVector(XYRotation);
+
+
+		// add movement 
+		AddMovementInput(RightDirection, MovementVector.X);
+		AddMovementInput(ForwardDirection, MovementVector.Y);
+	}
+	
 	if (getCanCancelAnimMontage())
 	{
 		if (GetMesh()->GetAnimInstance()->IsAnyMontagePlaying())
@@ -623,7 +843,10 @@ void ADemonCharacter::PlayerDodge()
 	{
 		return;
 	}
-	
+	if (getHitReactionMontageIsActive())
+	{
+		return;
+	}
 	if (DodgeMontageArray.Num() == 0)
 	{
 		Log("No dodge attacks");
@@ -658,12 +881,22 @@ void ADemonCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 	Log("Landed");
-	PlayMontage(JumpLandMontage);
+	if (!bIsClimbing)
+	{
+		PlayMontage(JumpLandMontage);
+	}
 	bCharacterlanded = true;
 	bCycleRunnigJumpMirror = !bCycleRunnigJumpMirror;
+	setCanCancelAnimMontage();
 	ToggleBoost(true, false);
 }
-
+void ADemonCharacter::UpdateHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug)
+{
+	if (bEnableLimbHitBox)
+	{
+		AttackHitbox(limbAttackSocketName);
+	}
+}
 void ADemonCharacter::StartHitbox(float deltaTime,bool bEnableRightPunch,bool enableDebug )
 {
 	if (!bEnableHitBox)
@@ -714,7 +947,23 @@ void ADemonCharacter::StartHitbox(float deltaTime,bool bEnableRightPunch,bool en
 	}
 	AttackHitbox(SocketName);
 }
+void ADemonCharacter::UpdateHitbox(float deltaTime)
+{
+	if (!bEnableHitBox)
+	{
+		return;
+	}
+	//Should be one of the hand locations
+	bool containsAllSockets = GetMesh()->GetAllSocketNames().Contains(AttackSocketName);
 
+	if (!containsAllSockets)
+	{
+		Log("Sockets are not available or not named correctyly");
+		return;
+	}
+
+	AttackHitbox(AttackSocketName);
+}
 void ADemonCharacter::AttackHitbox(FName SocketName)
 {
 	FVector AttackPoint = GetActorLocation();
@@ -745,7 +994,8 @@ void ADemonCharacter::AttackHitbox(FName SocketName)
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
 	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, StartPoint, StartPoint + AttackCenterDist * AttackVector, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
+	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, StartPoint, StartPoint + AttackCenterDist * AttackVector, 
+		radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
 	if (didHit)
 	{
 		if (AEnemy* enemy = Cast<AEnemy>(hitResult.GetActor()))
@@ -754,22 +1004,28 @@ void ADemonCharacter::AttackHitbox(FName SocketName)
 			{
 				actorsHit.Add(enemy);
 				enemy->HitReact(this);
-				DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
+				//SpawnParticle(HitImpact, hitResult.Location, FRotator::ZeroRotator);
+				if (HitNiagraImpact)
+				{
+					float impactScale = 0.5;
+					UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), HitNiagraImpact, AttackPoint, 
+						(StartPoint + AttackCenterDist * AttackVector).Rotation(), FVector(hitImpactSize), true, true, ENCPoolMethod::AutoRelease, true);
+				}
+				//DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
 			}
 		}
 	}
 }
-void ADemonCharacter::setEnableHitbox(bool enableHitbox)
+bool ADemonCharacter::getHitReactionMontageIsActive() const
 {
-	bEnableHitBox = enableHitbox;
-}
-void ADemonCharacter::RestartHitbox()
-{
-	actorsHit.Empty();
-	setEnableHitbox(false);
+	return HitReactionMontage == GetCurrentMontage() || HitReactionMontageArray.Contains(GetCurrentMontage());
 }
 float ADemonCharacter::HitReact(AActor* sender)
 {
+	if (GetIsDodgeAnimationPlaying())
+	{
+		return 0.0;
+	}
 	if (!HitReactionMontage)
 	{
 		Log("HitRection montage no good");
@@ -804,7 +1060,8 @@ float ADemonCharacter::HitReact(AActor* sender)
 		{
 			newRot.Yaw = character->GetActorRotation().Yaw;
 		}
-		MoveCharacterToRotationAndLocationIninterval(GetActorLocation(), newRot, hitReactMontage->GetDefaultBlendInTime());
+		//MoveCharacterToRotationAndLocationIninterval(GetActorLocation(), newRot, hitReactMontage->GetDefaultBlendInTime());
+		SetActorRotation(newRot);
 	}
 
 	return T;
@@ -812,23 +1069,91 @@ float ADemonCharacter::HitReact(AActor* sender)
 void ADemonCharacter::HitReactEnd(UAnimMontage* animMontage, bool bInterrupted)
 {
 }
-void ADemonCharacter::PlayerAttackEnd(UAnimMontage* animMontage, bool bInterrupted)
+
+void ADemonCharacter::AttackRushEnd(UAnimMontage* animMontage, bool bInterrupted)
 {
-	Log("Player Attack End");
-	actorsHit.Empty();
-	if (!bInterrupted)
+}
+
+void ADemonCharacter::EKeyActionPress()
+{
+	if (bIsClimbing)
 	{
-		currentAttackIndex = 0;
+		bIsClimbing = false;
 	}
 	else
 	{
-		playerCanAttck = true;
+		//Needs work
+		//StartWallClimb();
 	}
 }
-void ADemonCharacter::NextAttack()
+void ADemonCharacter::StartWallClimb()
 {
-	Log("Player Can go to next attack");
-	playerCanAttck = true;
+	FHitResult hitResult;
+	bIsClimbing = SphereTrace(GetActorLocation(), GetActorLocation() + GetActorForwardVector() * 50, 25, ETraceTypeQuery::TraceTypeQuery1, 2, hitResult);
+	if (!bIsClimbing)
+	{
+		return;
+	}
+	CLimbNormal = hitResult.Normal;
+	GetCharacterMovement()->bCanWalkOffLedges = false;
+
+}
+void ADemonCharacter::UpdateWallclimb(float DeltaTime)
+{
+	FVector PlayerCurrentGravityDir = GetCharacterMovement()->GetGravityDirection();
+	FVector TargetGravityDirection = bIsClimbing ? CLimbNormal * -1 : FVector(0, 0, -1);
+	float targetSpeed = bIsClimbing ? 5.0 : 10.0;
+	FVector newGravityDirection = UKismetMathLibrary::VInterpTo_Constant(PlayerCurrentGravityDir, TargetGravityDirection, DeltaTime, targetSpeed);
+	GetCharacterMovement()->SetGravityDirection(newGravityDirection);
+
+}
+void ADemonCharacter::UpdateMovementRotation(float DeltatTime)
+{
+	if (bStartCharcterMovementRotation)
+	{
+		Log("Turning?");
+		float ratio = currentCharacterRotationTime / targetCurrentRotationTime;
+		if (GetCurrentMontage())
+		{
+			auto MyMontage = GetCurrentMontage();
+			if (MainCharacterAnimInstance->GetCurveValue("CharacterRotationCurve", ratio))
+			{
+				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0), 
+					FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
+				
+				SetActorRotation(FRotator(0, newYaw, 0));
+				if (ratio >= 0.99)
+				{
+					SetActorRotation(FRotator(0, characterFinalYawRotation, 0));
+					bStartCharcterMovementRotation = false;
+				}
+			}
+			else
+			{
+				Log("Could not find curve value");
+			}
+			
+		}
+		else
+		{
+			if (currentCharacterRotationTime >= targetCurrentRotationTime)
+			{
+				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0),
+					FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
+				SetActorRotation(FRotator(0, characterFinalYawRotation, 0));
+				bStartCharcterMovementRotation = false;
+				return;
+			}
+			else
+			{
+				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0),
+					FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
+				SetActorRotation(FRotator(0, newYaw, 0));
+				bStartCharcterMovementRotation = false;
+			}
+		}
+		currentCharacterRotationTime += DeltatTime;
+	}
 }
 bool ADemonCharacter::GetIsAttackAnimationPlaying()
 {

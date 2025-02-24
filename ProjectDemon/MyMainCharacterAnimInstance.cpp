@@ -8,20 +8,21 @@
 #include"GameFramework//CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Animation/AnimSequence.h"
-#include <Kismet/KismetSystemLibrary.h>
 
 void UMyMainCharacterAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
-	Owner = TryGetPawnOwner();
-
-	if (!Owner)
+}
+void UMyMainCharacterAnimInstance::NativeBeginPlay()
+{
+	Super::NativeBeginPlay();
+	if (!GetAnimCharacter())
 	{
 		return;
 	}
-	if (Owner->IsA(ADemonCharacter::StaticClass()))
+	if (GetAnimCharacter()->IsA(ADemonCharacter::StaticClass()))
 	{
-		MyChar = Cast<ADemonCharacter>(Owner);
+		MyChar = Cast<ADemonCharacter>(GetAnimCharacter());
 		if (MyChar)
 		{
 			UKismetSystemLibrary::PrintString(this, "Successful Instanciation of charcter!");
@@ -35,31 +36,12 @@ void UMyMainCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	Super::NativeUpdateAnimation(DeltaSeconds);
 	if (MyChar == nullptr)
 	{
-		MyChar = Cast<ADemonCharacter>(TryGetPawnOwner());
+		MyChar = Cast<ADemonCharacter>(GetAnimCharacter());
 		return;
 	}
-	bIsMoving = MyChar->getSpeed() > 0.0;
-	if (bIsMoving)
-	{
-		//UKismetSystemLibrary::PrintString(this, "Character is moving");
-	}
-	bIsFalling = MyChar->InAir();
-	if (bIsFalling)
-	{
-		//UKismetSystemLibrary::PrintString(this, "Character is Falling");
-	}
-	bJumpButtonIsPressed = MyChar->getJumpButtonisPressed();
-	bCharacterLanded = MyChar->getCharacterLanded();
-	Speed = MyChar->getSpeed();
+	bIsMoving = MyChar->GetInputDirection().Size() > 0.0;
 	bRunJumpCycle = MyChar->bCycleRunnigJumpMirror;
 }
-
-FVector UMyMainCharacterAnimInstance::CalculateLaunchVelocity(UAnimSequence* Sequence)
-{
-
-	return FVector(0,0,-1*GetWorld()->GetGravityZ() * Sequence->GetPlayLength()/1);
-}
-
 void UMyMainCharacterAnimInstance::AimOffset(const FVector& Location, const FRotator& Rotation,FName Bone)
 {
 	auto Rot = UKismetMathLibrary::FindLookAtRotation(MyChar->GetMesh()->GetSocketLocation("Spine1"),
@@ -85,49 +67,6 @@ void UMyMainCharacterAnimInstance::AimOffset(const FVector& Location, const FRot
 	return;
 }
 
-float UMyMainCharacterAnimInstance::PauseAnimMontage(float length, bool allowFunctionOverride)
-{
-	GetWorld()->GetTimerManager().ClearTimer(PauseAnimMontageTimer);
-	auto CurrentActiveMontage = GetCurrentActiveMontage();
-	CurrentPausedMontage = CurrentActiveMontage;
-	//Montage_Pause(CurrentActiveMontage);
-	float AnimPauseLength = allowFunctionOverride ? length : getPauseLength();
-	montageOrigPlayRate = CurrentActiveMontage->RateScale;
-	montageCurrPlayRate = montageOrigPlayRate;
-	bEnableFloatDown = true;
-	if (allowFunctionOverride)
-	{
-		GetWorld()->GetTimerManager().SetTimer(PauseAnimMontageTimer, this, &UMyMainCharacterAnimInstance::ResumePausedAnimMontage, length);
-	}
-	else
-	{
-		GetWorld()->GetTimerManager().SetTimer(PauseAnimMontageTimer, this, &UMyMainCharacterAnimInstance::ResumePausedAnimMontage, getPauseLength());
-	}
-	return AnimPauseLength;
-}
-
-void UMyMainCharacterAnimInstance::ResumePausedAnimMontage()
-{
-	GetWorld()->GetTimerManager().ClearTimer(PauseAnimMontageTimer);
-	bEnableFloatDown = false;
-	if (CurrentPausedMontage == GetCurrentActiveMontage())
-	{
-		Montage_SetPlayRate(CurrentPausedMontage, 1.0);
-		Montage_Resume(CurrentPausedMontage);
-	}
-}
-
-void UMyMainCharacterAnimInstance::SlowAnimMont(float rate)
-{
-	Montage_SetPlayRate(GetCurrentActiveMontage(),rate);
-}
-void UMyMainCharacterAnimInstance::ResumeMont(float rate)
-{
-	Montage_SetPlayRate(GetCurrentActiveMontage(), rate);
-}
-
-
-
 void UMyMainCharacterAnimInstance::startBlink()
 {
 
@@ -136,6 +75,13 @@ void UMyMainCharacterAnimInstance::startBlink()
 
 void UMyMainCharacterAnimInstance::Blink()
 {
+	if (USkeletalMeshComponent* Component = GetOwningComponent())
+	{
+		if (Component->GetMorphTarget("EyesClosedCurve") == 0.0) 
+		{
+			return;
+		}
+	}
 	if (bEyesClosed)
 	{
 		float T = UKismetMathLibrary::RandomFloatInRange(5.0, 7.0);
@@ -151,22 +97,14 @@ void UMyMainCharacterAnimInstance::Blink()
 	return;
 }
 
-float UMyMainCharacterAnimInstance::getAnimNotifyTime(UAnimSequence* animSequence, FString notifyNmae, FString notifyPrefix)
+void UMyMainCharacterAnimInstance::setEnableMirror(bool EnableMirror)
 {
-	if (!animSequence)
-	{
-		UKismetSystemLibrary::PrintString(this, "Anim sequence is null");
-		return - 1.0;
-	}
-	for (FAnimNotifyEvent notifyEvent : animSequence->Notifies)
-	{
-		if (notifyEvent.GetNotifyEventName() == notifyPrefix + notifyNmae)
-		{
-			UKismetSystemLibrary::PrintString(this, "Notify Found");
-			return notifyEvent.GetTime();
-		}
-	}
-	UKismetSystemLibrary::PrintString(this, "Could not find notify");
-	return -1.0;
+	bEnableMirror = EnableMirror;
 }
+
+bool UMyMainCharacterAnimInstance::getEnableMirror()
+{
+	return bEnableMirror;
+}
+
 

@@ -16,6 +16,7 @@
 #include "InputActionValue.h"
 #include <Kismet/KismetMathLibrary.h>
 #include <Kismet/KismetSystemLibrary.h>
+#include "Containers/Map.h"
 #include "DemonCharacter.generated.h"
 
 UENUM(BlueprintType)
@@ -24,6 +25,20 @@ enum class EDemonMovementState :uint8
 	MS_Normal UMETA(DisplayName = "Normal"),
 	MS_Jump UMETA(DisplayName = "Jump"),
 	MS_Glide UMETA(DisplayName = "Glide")
+};
+UENUM(BlueprintType)
+enum class ELowerArmState :uint8
+{
+	LAS_Normal UMETA(DisplayName = "Normal"),
+	LAS_Mirror UMETA(DisplayName = "Mirror"),
+	LAS_Disabled UMETA(DisplayName = "Disabled")
+};
+UENUM(BlueprintType)
+enum class EUpperArmState :uint8
+{
+	LAS_Normal UMETA(DisplayName = "Normal"),
+	LAS_Mirror UMETA(DisplayName = "Mirror"),
+	LAS_Disabled UMETA(DisplayName = "Disabled")
 };
 /**
  * 
@@ -53,7 +68,9 @@ public:
 	/** Right Mouse Action Input Action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	UInputAction* RightMouseAction;
-
+	/** E Press Action Input Action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	UInputAction* EPressAction;
 
 	UPROPERTY(EditAnywhere, Category = Mantle)
 	UAnimMontage* MantleMontage;
@@ -61,19 +78,30 @@ public:
 	UPROPERTY(EditAnywhere, Category = Jump)
 	UAnimMontage* JumpLandMontage;
 
+	UPROPERTY(EditAnywhere, Category = Jump)
+	UAnimMontage* JumpStartMontage;
+
 	UPROPERTY(EditAnywhere, Category = Mantle)
 	float mantleZOffsset = 10;
 
 	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Material)
+	TArray<int> MaterialIndexHide;
 
-
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
 	//Used for debugging of drawing the playewr input
 	void DrawInput(float DeltaTime);
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CustomMovement, meta = (AllowPrivateAccess = "true"))
+	bool bEnableRun;
+
+	void UpdateSpeed(float DeltaTime);
 	
+	float orignalWalkSpeed = 500.0;
+
 	void Mantle(float DeltaTime);
 	void MantleEnd(UAnimMontage* animMontage, bool bInterrupted);
 
@@ -89,6 +117,12 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void canGoToNextfreeflow();
 
+	void UpdatePlayerAttack(float DeltaTime);
+
+	// Returns distance frokm character with consideration of other characters capsule size;
+	float getDistanceFromCharacter(ACharacter* character);
+
+	UFUNCTION(BlueprintCallable)
 	void PlayerAttackEnd(UAnimMontage* animMontage, bool bInterrupted);
 	UFUNCTION(BlueprintCallable)
 	void NextAttack();
@@ -100,7 +134,7 @@ public:
 	//Gets whether free flow attack animation is playing
 	bool GetIsFreeflowAnimationPlaying();
 
-	UFUNCTION(BlueprintPure)
+	UFUNCTION(BlueprintPure, BlueprintCallable)
 	bool GetIsDodgeAnimationPlaying();
 	TArray<AActor*> GetActorsFromSphere(float radius = 1200.0f, bool enableDebug = false);
 	void PlayerAttack();
@@ -135,6 +169,8 @@ public:
 	void ShiftClick();
 	void RightMouseClick();
 	void RightMouseClickEnd();
+	virtual void onMoveStarted(const FInputActionValue& Value);
+	virtual void onMoveEnd(const FInputActionValue& Value) override;
 	
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
@@ -186,6 +222,8 @@ public:
 
 	void Landed(const FHitResult& Hit) override;
 
+	void UpdateHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug);
+
 	
 
 	
@@ -193,17 +231,19 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (BlueprintProtected = true))
 	bool bCycleRunnigJumpMirror = false;
 
-	bool bEnableHitBox = false;
-	UFUNCTION(BlueprintCallable)
-	void setEnableHitbox(bool enableHitbox);
-	UFUNCTION(BlueprintCallable)
-	void RestartHitbox();
 	void StartHitbox(float deltaTime, bool bEnableRightPunch = true, bool enableDebug = false);
+
+	void UpdateHitbox(float deltaTime);
 
 	void AttackHitbox(FName SocketName);
 	
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* HitReactionMontage;
+
+	UPROPERTY(EditAnywhere, Category = Combat)
+	TArray<UAnimMontage*> HitReactionMontageArray;
+
+	bool getHitReactionMontageIsActive() const;
 
 	/// <summary>
 	/// Initiates how the character should react based on who is the sender
@@ -217,7 +257,20 @@ public:
 private:
 	//Makesure for FName to seperate by ','
 	UPROPERTY(EditAnywhere, Category = Combat)
+	TArray<UAnimMontage*> AttackMontageArray;
+
+	//Makesure for FName to seperate by ','
+	UPROPERTY(EditAnywhere, Category = Combat)
 	TMap<UAnimMontage*, FString> AttackMontageMap;
+
+	//The minimum distance to stop attack rush
+	UPROPERTY(EditAnywhere, Category = Combat)
+	float attackRushMinimumDistance = 100;
+
+	UFUNCTION()
+	void AttackRushEnd(UAnimMontage* animMontage, bool bInterrupted);
+	UPROPERTY(EditAnywhere, Category = Combat)
+	UAnimMontage* AttackRushMontage;
 
 	UPROPERTY(EditAnywhere, Category = Combat)
 	TMap<UAnimMontage*, FString> FreeflowAttackMontageMap;
@@ -238,5 +291,29 @@ private:
 	bool bCharacterlanded = false;
 	
 
+public:
+	void StartWallClimb();
+	void EKeyActionPress();
+	void UpdateWallclimb(float DeltaTime);
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bIsClimbing = false;
+private:
 	
+	FVector CLimbNormal;
+private:
+	bool bStartCharcterMovementRotation = false;
+	float currentCharacterRotationTime = 0.0;
+	float targetCurrentRotationTime;
+
+	float characterInitialYawRotation;
+	float characterFinalYawRotation;
+public:
+	void UpdateMovementRotation(float DeltatTime);
+
+	UPROPERTY(BlueprintReadOnly)
+	ELowerArmState LowerArmState = ELowerArmState::LAS_Normal;
+
+	UPROPERTY(BlueprintReadOnly)
+	EUpperArmState UpperArmState = EUpperArmState::LAS_Normal;
+
 };

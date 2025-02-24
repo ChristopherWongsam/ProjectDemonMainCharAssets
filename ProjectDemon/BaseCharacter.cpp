@@ -6,6 +6,7 @@
 #include <Kismet/GameplayStatics.h>
 #include "GameFramework/CharacterMovementComponent.h"
 #include <Runtime/Engine/Private/InterpolateComponentToAction.h>
+#include <Kismet/KismetMathLibrary.h>
 
 void ABaseCharacter::BeginPlay()
 {
@@ -13,7 +14,14 @@ void ABaseCharacter::BeginPlay()
 	defaultGravityScale = GetCharacterMovement()->GravityScale;
 	defaultAirControl = GetCharacterMovement()->AirControl;
 }
-
+void ABaseCharacter::SpawnParticle(UParticleSystem* particleSystem,FVector Location,FRotator Rotation, FVector SpawnScale)
+{
+	if (!particleSystem)
+	{
+		Log("Particle System not valid");
+	}
+	UGameplayStatics::SpawnEmitterAtLocation(this, particleSystem,Location, Rotation, SpawnScale, true);
+}
 void ABaseCharacter::Log(FString log, bool printToScreen)
 {
 	UKismetSystemLibrary::PrintString(this, log, printToScreen);
@@ -28,7 +36,6 @@ void ABaseCharacter::PrintLog(FString log)
 }
 void ABaseCharacter::Delay(float duration, FName funcName)
 {
-	FTimerHandle TimerHandle_AttackDelay;
 	FTimerDelegate Delegate; // Delegate to bind function with parameters
 	Delegate.BindUFunction(this, funcName);
 
@@ -38,6 +45,10 @@ void ABaseCharacter::Delay(float duration, FName funcName)
 		duration, // float delay until elapsed
 		false); // looping?
 }
+void ABaseCharacter::CancelAllDelay()
+{
+	GetWorld()->GetTimerManager().ClearAllTimersForObject(this);
+}
 void ABaseCharacter::setCanCancelAnimMontage(bool canCancelAnimMontage)
 {
 	bCanCancelAnimMontage = canCancelAnimMontage;
@@ -45,6 +56,10 @@ void ABaseCharacter::setCanCancelAnimMontage(bool canCancelAnimMontage)
 bool ABaseCharacter::getCanCancelAnimMontage()
 {
 	return bCanCancelAnimMontage;
+}
+void ABaseCharacter::setCanHitReact(bool canCancelAnimMontage)
+{
+	bCanCancelAnimMontage = canCancelAnimMontage;
 }
 void ABaseCharacter::ResetMovementComponentValues()
 {
@@ -84,7 +99,7 @@ float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float ra
 	if (Montage)
 	{
 		bCanCancelAnimMontage = false;
-		Log("Valid montage!");
+		//CanHitReact = true;
 		auto T = GetMesh()->GetAnimInstance()->Montage_Play(Montage, rate);
 		GetMesh()->GetAnimInstance()->Montage_JumpToSection(Section, Montage);
 		auto time = Montage->GetSectionLength(Montage->GetSectionIndex(Section));
@@ -94,8 +109,17 @@ float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float ra
 	}
 	else
 	{
-		Log("Invalid montage!");
+		Log("Cannot play montage!");
 		return -1.0;
+	}
+}
+void ABaseCharacter::BindMontage(UAnimMontage* Montage, FName functionName)
+{
+	if (Montage)
+	{
+		FOnMontageEnded BlendOutDelegate;
+		BlendOutDelegate.BindUFunction(this, functionName);
+		GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, Montage);
 	}
 }
 
@@ -195,6 +219,35 @@ void ABaseCharacter::cancelMoveCharacterToRotationAndLocationIninterval()
 {
 	FLatentActionManager& LatentActionManager = GetWorld()->GetLatentActionManager();
 }
+ETurnState ABaseCharacter::TurnInPlace(FRotator CameraRotation)
+{
+	FRotator DeltaRotator = UKismetMathLibrary::NormalizedDeltaRotator(CameraRotation, GetActorRotation());
+
+	if (DeltaRotator.Yaw > 90.0 && DeltaRotator.Yaw <= 135)
+	{
+		//Play right
+		return ETurnState::ETS_Right;
+	}
+	else if(DeltaRotator.Yaw < -90.0 && DeltaRotator.Yaw >= -135.0)
+	{
+		//Play left
+		return ETurnState::ETS_Left;
+	}
+	else if (DeltaRotator.Yaw < -135.0 && DeltaRotator.Yaw >= -180)
+	{
+		//Play Left half
+		return ETurnState::ETS_LeftHalf;
+	}
+	else if (DeltaRotator.Yaw > 135 && DeltaRotator.Yaw <= 180)
+	{
+		//Play Right Half
+		return ETurnState::ETS_RightHalf;
+	}
+	else
+	{
+		return ETurnState::ETS_None;
+	}
+}
 float ABaseCharacter::newValueFromChange(float currentValue, float newValue)
 {
 	if (newValue == 0.0)
@@ -241,3 +294,33 @@ float ABaseCharacter::InterpValueTime(float currentValue, float targetValue, flo
 	}
 }
 
+void ABaseCharacter::setEnableHitbox(bool enableHitbox)
+{
+	bEnableHitBox = enableHitbox;
+	if (!bEnableHitBox)
+	{
+		actorsHit.Empty();
+	}
+}
+void ABaseCharacter::setEnableLimbHitbox(bool enableHitbox, FName LimbAttackSocketName)
+{
+	bEnableHitBox = enableHitbox;
+	AttackSocketName = LimbAttackSocketName;
+	if (!bEnableLimbHitBox)
+	{
+		actorsHit.Empty();
+	}
+}
+void ABaseCharacter::RestartHitbox()
+{
+	actorsHit.Empty();
+	setEnableHitbox(false);
+}
+float ABaseCharacter::getSpeed()
+{
+	return GetCharacterMovement()->Velocity.Size();
+}
+bool ABaseCharacter::InAir() const
+{
+	return GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Falling || GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Flying;
+}
