@@ -24,6 +24,7 @@ private:
 	bool bCanCancelAnimMontage = false;
 	float TimeInterpValue = 0.0;
 	float newValueFromChange(float value, float newValue);
+	UAnimMontage* MontageToCancel;
 public:
 	virtual void BeginPlay() override;
 
@@ -91,20 +92,20 @@ public:
 	//Will return the time in anim sequence to get the time. If it cannot find it it will return -1.0
 	UFUNCTION()
 	float getMontageAnimNotifyTime(const UAnimMontage* Mont, FString notifyName, FString notifyPrefix = "AnimNotify_");
-
+	// Make sure function is UFUNCTION()
 	void Delay(float duration, FName funcName);
 	void CancelAllDelay();
-	/*Sets whether movment input can cancel the montage.Recommonded to use with anim notify.*/
+	/*Sets whether movment input can cancel the montage or anything. If no montage is passed, then the current active montage will be used. Recommonded to use with anim notify.*/
 	UFUNCTION(BlueprintCallable)
-	void setCanCancelAnimMontage(bool canCancelAnimMontage = true);
+	void setCanCancelAnimMontage(bool canCancelAnimMontage = true, UAnimMontage* montageToCancel = nullptr);
 	/*Returns whether the animation can be canceled.*/
 	bool getCanCancelAnimMontage();
 
 	/*Sets whether character can be hit reacted. Set to true if during montage, the montage can be interrupted by hit reaction*/
 	UFUNCTION(BlueprintCallable)
-	void setCanHitReact(bool canCancelAnimMontage = true);
+	void setCanHitReact(bool canHitReact = true) { CanHitReact = canHitReact; };
 	/*Gets whether character can be hit reacted. If true, the montage can be interrupted when hit, false the player cannot be interrupted*/
-	bool getCanHitReact() { return bCanCancelAnimMontage; };
+	bool getCanHitReact() const { return CanHitReact; };
 
 	void ResetMovementComponentValues();
 

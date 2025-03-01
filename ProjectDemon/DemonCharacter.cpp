@@ -605,7 +605,7 @@ void ADemonCharacter:: PlayerAttack()
 		{
 			PlayMontage(AttackRushMontage);
 			BindMontage(AttackRushMontage, "AttackRushEnd");
-			//MainCharacterAnimInstance->bindMontageRootMotionModifier(AttackRushMontage, 0.5);
+			MainCharacterAnimInstance->bindMontageRootMotionModifier(AttackRushMontage, 0.5);
 			return;
 		}
 	}
@@ -687,7 +687,7 @@ void ADemonCharacter::onMoveStarted(const FInputActionValue& Value)
 	FVector2D MovementVector = Value.Get<FVector2D>();
 	MovingForwardValue = MovementVector.Y;
 	MovingRightValue = MovementVector.X;
-
+	/*
 	bStartCharcterMovementRotation = true;
 	currentCharacterRotationTime = 0.0;
 	targetCurrentRotationTime = 1.0;
@@ -723,6 +723,7 @@ void ADemonCharacter::onMoveStarted(const FInputActionValue& Value)
 	{
 		//Do something?
 	}
+	*/
 }
 void ADemonCharacter::onMoveEnd(const FInputActionValue& Value)
 {

@@ -105,7 +105,7 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataFromActiveMontage(float tim
 	{
 		return FVector::ZeroVector;
 	}
-
+	float totalTime = 0.0;
 	for (auto section : Montage->CompositeSections)
 	{
 		if (Montage_GetCurrentSection() == section.SectionName)
@@ -115,13 +115,17 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataFromActiveMontage(float tim
 				FTransform OutAtom;
 				if (time > 0.0)
 				{
-					auto T = time;
-					FSkeletonPoseBoneIndex BoneIndex(0);
-					animSequence->GetBoneTransform(OutAtom, BoneIndex, T, true);
-					return OutAtom.GetLocation();
+					auto T = time - totalTime;
+					if (T > 0.0)
+					{
+						FSkeletonPoseBoneIndex BoneIndex(0);
+						animSequence->GetBoneTransform(OutAtom, BoneIndex, T, true);
+						return OutAtom.GetLocation();
+					}
 				}
 			}
 		}
+		totalTime += section.GetTime();
 	}
 	return FVector::ZeroVector;
 }
@@ -145,8 +149,6 @@ void UBaseCharacterAnimInstance::bindMontageRootMotionModifier(UAnimMontage* Mon
 	}
 
 	rootMotionVectorScale = vectorScale;
-	originalRootMotionmode = RootMotionMode;
-	RootMotionMode = ERootMotionMode::IgnoreRootMotion;
 	AnimCharOriginalLocation = AnimCharacter->GetActorLocation();
 	AnimCharForwardVector = AnimCharacter->GetActorForwardVector();
 	AnimCharUpVector = AnimCharacter->GetActorUpVector();
@@ -168,28 +170,16 @@ void UBaseCharacterAnimInstance::UpdateMontageRootMotion(float DeltaTime)
 				Offset.X * AnimCharRightVector * rootMotionVectorScale.X;
 			FVector Velocity = (NewCharacterLocation - AnimCharacter->GetActorLocation()) / DeltaTime;
 			AnimCharacter->GetCharacterMovement()->Velocity = Velocity;
+			AnimCharacter->GetCharacterMovement()->bOrientRotationToMovement = false;
 		}
 		else
 		{
+			AnimCharacter->GetCharacterMovement()->bOrientRotationToMovement = true;
 			bEnableRootMotionModifier = false;
-			RootMotionMode = originalRootMotionmode;
 		}
 	}
 }
 
-void UBaseCharacterAnimInstance::OnRootMotionMontageEnd(UAnimMontage* animMontage, bool bInterrupted)
-{
-	Log("Montage end in anim instance");
-	RootMotionMode = originalRootMotionmode;
-	if (bInterrupted)
-	{
-
-	}
-	else
-	{
-
-	}
-}
 float UBaseCharacterAnimInstance::PauseAnimMontage(float length, float playRate, bool allowFunctionOverride)
 {
 	GetWorld()->GetTimerManager().ClearTimer(PauseAnimMontageTimer);

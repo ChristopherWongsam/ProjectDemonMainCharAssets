@@ -49,17 +49,29 @@ void ABaseCharacter::CancelAllDelay()
 {
 	GetWorld()->GetTimerManager().ClearAllTimersForObject(this);
 }
-void ABaseCharacter::setCanCancelAnimMontage(bool canCancelAnimMontage)
+void ABaseCharacter::setCanCancelAnimMontage(bool canCancelAnimMontage, UAnimMontage* montageToCancel)
 {
+	if (montageToCancel)
+	{
+		MontageToCancel = montageToCancel;
+	}
+	else
+	{
+		MontageToCancel = GetCurrentMontage();
+	}
 	bCanCancelAnimMontage = canCancelAnimMontage;
 }
 bool ABaseCharacter::getCanCancelAnimMontage()
 {
+	if (!MontageToCancel)
+	{
+		return false;
+	}
+	if (GetCurrentMontage() != MontageToCancel)
+	{
+		return false;
+	}
 	return bCanCancelAnimMontage;
-}
-void ABaseCharacter::setCanHitReact(bool canCancelAnimMontage)
-{
-	bCanCancelAnimMontage = canCancelAnimMontage;
 }
 void ABaseCharacter::ResetMovementComponentValues()
 {
@@ -99,7 +111,7 @@ float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float ra
 	if (Montage)
 	{
 		bCanCancelAnimMontage = false;
-		//CanHitReact = true;
+		CanHitReact = true;
 		auto T = GetMesh()->GetAnimInstance()->Montage_Play(Montage, rate);
 		GetMesh()->GetAnimInstance()->Montage_JumpToSection(Section, Montage);
 		auto time = Montage->GetSectionLength(Montage->GetSectionIndex(Section));

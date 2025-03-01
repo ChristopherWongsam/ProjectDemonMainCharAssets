@@ -78,8 +78,8 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 		}
 		if (getSpeed() == 0.0 && !EnemyAnimInstance->Montage_IsActive(DodgeMontage) && !EnemyAnimInstance->Montage_IsActive(LightAttack))
 		{
-			int chance = UKismetMathLibrary::RandomInteger64InRange(0, 2);
-			if (chance == 0)
+			int chance = UKismetMathLibrary::RandomInteger64InRange(0, 1);
+			if (0)
 			{
 				if (DodgeMontage) 
 				{
@@ -88,10 +88,10 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 					BindMontage(DodgeMontage, "OnDodgeEnd");
 				}
 			}
-			else if(chance == 1)
+			else if(0)
 			{
 				bEnablePlayerRangeDecsion = false;
-				float waitTime = UKismetMathLibrary::RandomFloatInRange(2, 3);
+				float waitTime = UKismetMathLibrary::RandomFloatInRange(1.0, 2.0);
 				Delay(waitTime, "EnablePlayerRangeDecision");
 			}
 			else
@@ -119,7 +119,9 @@ void ABasicEnemy::OnDodgeEnd(UAnimMontage* Montage, bool interrupted)
 
 float ABasicEnemy::Attack()
 {
-	return PlayMontage(LightAttack);
+	const float T = PlayMontage(LightAttack);
+	setCanHitReact(false);
+	return T;
 }
 void ABasicEnemy::EnablePlayerRangeDecision()
 {
@@ -149,7 +151,7 @@ bool ABasicEnemy::GetIsDodgeAnimationPlaying()
 }
 float ABasicEnemy::HitReact(AActor* sender)
 {
-	if (GetIsAttackAnimationPlaying())
+	if (!getCanHitReact())
 	{
 		LogScreen("Can't hit enemy: enemy is Attacking");
 		return 0.0;

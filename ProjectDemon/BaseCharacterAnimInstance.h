@@ -46,7 +46,6 @@ public:
 private:
 	UAnimMontage* RootMotionMontage;
 	bool bEnableRootMotionModifier = false;
-	TEnumAsByte<ERootMotionMode::Type> originalRootMotionmode;
 	FVector AnimCharOriginalLocation;
 	FVector AnimCharForwardVector;
 	FVector AnimCharRightVector;
@@ -57,7 +56,6 @@ public:
 	void bindMontageRootMotionModifier(UAnimMontage* Montage, float rootMotionScale);
 	void bindMontageRootMotionModifier(UAnimMontage* Montage, FVector vectorScale = FVector(1));
 	void UpdateMontageRootMotion(float DeltaTime);
-	void OnRootMotionMontageEnd(UAnimMontage* animMontage, bool bInterrupted);
 
 	
 private:
