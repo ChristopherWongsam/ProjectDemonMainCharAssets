@@ -16,6 +16,12 @@ enum class ETurnState :uint8
 	ETS_RightHalf UMETA(DisplayName = "RightHalf"),
 	ETS_LeftHalf UMETA(DisplayName = "LeftHalf")
 };
+UENUM(BlueprintType)
+enum class EHitBoxType :uint8
+{
+	EHBT_UnArmed UMETA(DisplayName = "UnArmed"),
+	EHBT_Armed UMETA(DisplayName = "Armed")
+};
 UCLASS()
 class PROJECTDEMON_API ABaseCharacter : public ACharacter
 {
@@ -46,10 +52,11 @@ public:
 	/** Modifies log screen color**/
 	virtual void LogScreen(FString log, FLinearColor color = FLinearColor::Blue);
 	void PrintLog(FString log);
-	/*Custom way to play anim montage.Should use this.If there is no valid montage will return -1.0.*/
+	/*Custom way to play anim montage. Should use this. If there is no valid montage will return -1.0.*/
 	virtual float PlayMontage(UAnimMontage* Montage, FName Section = "Default", float rate = 1.0, bool bEnaleLowerArmAnim = false);
 	/*Binds montage to function oncee montage is done. Remeber to make functions UFUNCTION()*/ 
 	void BindMontage(UAnimMontage* Montage, FName functionName);
+	float BindAndPlayMontage(UAnimMontage* Montage, FName functionName);
 	/*
 	* 
 	* Trace int
@@ -107,6 +114,8 @@ public:
 	/*Gets whether character can be hit reacted. If true, the montage can be interrupted when hit, false the player cannot be interrupted*/
 	bool getCanHitReact() const { return CanHitReact; };
 
+	TArray<AActor*> GetActorsFromSphere(UClass* classType, float radius = 1200.0f, bool enableDebug = false);
+
 	void ResetMovementComponentValues();
 
 	UPROPERTY(EditAnywhere, Category = Combat)
@@ -135,9 +144,10 @@ protected:
 
 	FName AttackSocketName = "RightHandSocket";
 public:
+	EHitBoxType hitBoxType;
 	//Enables hit box. Will only activate if 
 	UFUNCTION(BlueprintCallable)
-	void setEnableHitbox(bool enableHitbox);
+	void setEnableHitbox(bool enableHitbox, EHitBoxType HitBoxType = EHitBoxType::EHBT_UnArmed);
 
 	// if set to false it will disable hit box
 	UFUNCTION(BlueprintCallable)

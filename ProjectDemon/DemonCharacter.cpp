@@ -14,7 +14,9 @@
 #include "C:/UE_5.4/Engine/Plugins/FX/Niagara/Source/Niagara/Public/NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 
-
+ADemonCharacter::ADemonCharacter()
+{
+}
 
 void ADemonCharacter::OnConstruction(const FTransform& Transform)
 {
@@ -23,6 +25,7 @@ void ADemonCharacter::OnConstruction(const FTransform& Transform)
 	{
 		GetMesh()->ShowMaterialSection(index, 0,false,0);
 	}
+	
 }
 
 void ADemonCharacter::BeginPlay()
@@ -34,21 +37,25 @@ void ADemonCharacter::BeginPlay()
 		Log("Unable to cast MainCharacterAnimInstance");
 	}
 	orignalWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	
+	
 	//getRootMotionData(DodgeMontageArray[0]);
 }
 void ADemonCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	
 	Mantle(DeltaTime);
 	SoftLock(DeltaTime);
-	//StartHitbox(DeltaTime,true,false);
-	UpdateHitbox(DeltaTime);
+	StartHitbox(DeltaTime);
+	//UpdateHitbox(DeltaTime);
 	Swing(DeltaTime,true);
 	UpdateBoost(DeltaTime);
 	UpdateWallclimb(DeltaTime);
 	UpdateMovementRotation(DeltaTime);
 	UpdatePlayerAttack(DeltaTime);
-	UpdateCamera(DeltaTime);
+	
+	UpdateDodgeGlide(DeltaTime);
 }
 void ADemonCharacter::DrawInput(float DeltaTime)
 {
@@ -182,7 +189,7 @@ void ADemonCharacter::StartFreeflow(bool enableDebug)
 	auto inputDirection = GetInputDirection();
 	
 
-	TArray<AActor*> outActors = GetActorsFromSphere();
+	TArray<AActor*> outActors = GetActorsFromSphere(AEnemy::StaticClass());
 	Log("Num of actors in sphere: " + FString::FromInt(outActors.Num()));
 
 	FVector bestVect = FVector::ZeroVector;
@@ -359,7 +366,11 @@ void ADemonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 }
 void ADemonCharacter::StartJump()
 {
-	
+	bJumpButtonIsPressed = true;
+	if (InAir())
+	{
+		return;
+	}
 	if (GetCurrentMontage())
 	{
 		if (GetCurrentMontage() == JumpLandMontage)
@@ -367,10 +378,10 @@ void ADemonCharacter::StartJump()
 			MainCharacterAnimInstance->Montage_Stop(0.0, JumpLandMontage);
 		}
 	}
-	bJumpButtonIsPressed = true;
+	
 	if (JumpStartMontage)
 	{
-		if (getSpeed() > 0.0)
+		if (0)
 		{
 			PlayMontage(JumpStartMontage,"JumpRun");
 		}
@@ -426,12 +437,37 @@ void ADemonCharacter::ShiftClick()
 void ADemonCharacter::RightMouseClick()
 {
 	Log("Right mouse click");
-	//To Swing or not to swing?
-	//StartSwing();
+	bRightMouseButtonIsPressed = true;
+
+	if (BlockParryChainMap.Num() > 0)
+	{
+		TArray<UAnimMontage*> montages;
+		BlockParryChainMap.GenerateKeyArray(montages);
+
+		UAnimMontage* montage = montages[0];
+
+		bPlayerCanParry = true;
+
+		PlayMontage(montage);
+	}
 }
 void ADemonCharacter::RightMouseClickEnd()
 {
-	Log("Right mouse click");
+	bRightMouseButtonIsPressed = false;
+
+	UAnimMontage* mont = GetCurrentMontage();
+
+	TArray<UAnimMontage*> keyMontages;
+	TArray<UAnimMontage*> valueMontages;
+
+	BlockParryChainMap.GenerateKeyArray(keyMontages);
+	BlockParryChainMap.GenerateValueArray(valueMontages);
+
+	if (keyMontages.Contains(mont) || valueMontages.Contains(mont))
+	{
+		StopAnimMontage(mont);
+		bPlayerCanParry = false;
+	}
 }
 
 void ADemonCharacter::ToggleBoost(bool reset, bool activate)
@@ -601,7 +637,7 @@ void ADemonCharacter:: PlayerAttack()
 		//MoveCharacterToRotationAndLocationIninterval(GetActorLocation(), newRot, moveToTime);
 		SetActorRotation(newRot);
 		float distanceFromEnemy = getDistanceFromCharacter(playerEnemy);
-		if (distanceFromEnemy > attackRushMinimumDistance && 1)
+		if (distanceFromEnemy > attackRushMinimumDistance && bEnableAttackRush)
 		{
 			PlayMontage(AttackRushMontage);
 			BindMontage(AttackRushMontage, "AttackRushEnd");
@@ -651,9 +687,6 @@ void ADemonCharacter:: PlayerAttack()
 }
 void ADemonCharacter::PlayerAttackEnd(UAnimMontage* animMontage, bool bInterrupted)
 {
-	actorsHit.Empty();
-	bEnableHitBox = false;
-
 	if (bInterrupted)
 	{
 		
@@ -666,8 +699,6 @@ void ADemonCharacter::PlayerAttackEnd(UAnimMontage* animMontage, bool bInterrupt
 	LowerArmState = ELowerArmState::LAS_Normal;
 	MainCharacterAnimInstance->setEnableMirror(false);
 	playerCanAttck = true;
-	
-	
 }
 void ADemonCharacter::NextAttack()
 {
@@ -676,54 +707,56 @@ void ADemonCharacter::NextAttack()
 void ADemonCharacter::onMoveStarted(const FInputActionValue& Value)
 {
 	Log("Move Started");
-	if (GetCurrentMontage())
-	{
-		if (GetCurrentMontage() == TurnLeftMontage || GetCurrentMontage() == TurnRightMontage || 
-			GetCurrentMontage() == TurnBackRightMontage || GetCurrentMontage() == TurnBackLeftMontage)
-		{
-			return;
-		}
-	}
+	
 	FVector2D MovementVector = Value.Get<FVector2D>();
 	MovingForwardValue = MovementVector.Y;
 	MovingRightValue = MovementVector.X;
-	/*
-	bStartCharcterMovementRotation = true;
-	currentCharacterRotationTime = 0.0;
-	targetCurrentRotationTime = 1.0;
-
-	characterInitialYawRotation = GetActorRotation().Yaw;
-	characterFinalYawRotation = GetInputDirection().Rotation().Yaw;
-
-	ETurnState turnState = TurnInPlace(GetInputDirection().Rotation());
-	if (turnState != ETurnState::ETS_None)
+	
+	if (!InAir())
 	{
-		switch (turnState) 
+		bStartCharcterMovementRotation = true;
+
+		characterInitialYawRotation = GetActorRotation().Yaw;
+		characterFinalYawRotation = GetInputDirection().Rotation().Yaw;
+
+		FRotator DeltaRotator = UKismetMathLibrary::NormalizedDeltaRotator(GetInputDirection().Rotation(), GetActorRotation());
+
+		currentCharacterRotationTime = 0.0;
+		float ratio = FMath::Abs(DeltaRotator.Yaw);
+		targetCurrentRotationTime = 0.2 * ratio / 180.0;
+
+		Log("Delta input rotation: " + FString::SanitizeFloat(ratio));
+
+		ETurnState turnState = TurnInPlace(GetInputDirection().Rotation());
+
+		if (turnState != ETurnState::ETS_None)
 		{
-				case ETurnState::ETS_Left:
-					PlayMontage(TurnLeftMontage);
-					break;
-				case ETurnState::ETS_Right:
-					PlayMontage(TurnRightMontage);
-					break;
-				case ETurnState::ETS_RightHalf:
-					PlayMontage(TurnBackRightMontage);
-					break;
-				case ETurnState::ETS_LeftHalf:
-					PlayMontage(TurnBackLeftMontage);
-					break;
-				default:
-					break;
+			float sectionLength = targetCurrentRotationTime;
+			UAnimMontage* turnMontage = nullptr;
+			switch (turnState)
+			{
+			case ETurnState::ETS_Left:
+				turnMontage = TurnBackLeftMontage;
+				break;
+			case ETurnState::ETS_Right:
+				turnMontage = TurnBackRightMontage;
+				break;
+			case ETurnState::ETS_RightHalf:
+				turnMontage = TurnRightMontage;
+				break;
+			case ETurnState::ETS_LeftHalf:
+				turnMontage = TurnLeftMontage;
+				break;
+			default:
+				break;
+			}
+			if (turnMontage)
+			{
+				Log("Turn montage found?");
+				PlayMontage(turnMontage);
+			}
 		}
-		currentCharacterRotationTime = targetCurrentRotationTime;
-
-		setCanCancelAnimMontage();
 	}
-	else
-	{
-		//Do something?
-	}
-	*/
 }
 void ADemonCharacter::onMoveEnd(const FInputActionValue& Value)
 {
@@ -732,6 +765,18 @@ void ADemonCharacter::onMoveEnd(const FInputActionValue& Value)
 	FVector2D MovementVector = Value.Get<FVector2D>();
 	MovingForwardValue = MovementVector.Y;
 	MovingRightValue = MovementVector.X;
+	springArmSpeed = idleSpringArmSpeed;
+	bStartCharcterMovementRotation = false;
+	if (getIsRotationMontPlaying())
+	{
+		MainCharacterAnimInstance->StopAllMontages(0.2);
+	}
+	//Delay(idleSpringArmDelay, "EnableZoomToChar");
+}
+bool ADemonCharacter::getIsRotationMontPlaying() const
+{
+	return MainCharacterAnimInstance->Montage_IsActive(TurnLeftMontage) || MainCharacterAnimInstance->Montage_IsActive(TurnRightMontage) ||
+		MainCharacterAnimInstance->Montage_IsActive(TurnBackRightMontage) || MainCharacterAnimInstance->Montage_IsActive(TurnBackLeftMontage);
 }
 void ADemonCharacter::Move(const FInputActionValue& Value)
 {
@@ -740,12 +785,67 @@ void ADemonCharacter::Move(const FInputActionValue& Value)
 	MovingForwardValue = MovementVector.Y;
 	MovingRightValue = MovementVector.X;
 
-	if (MovementVector.Length() < 0.5)
+	
+	if (bStartCharcterMovementRotation)
 	{
+		const float DeltaTime = GetWorld()->GetDeltaSeconds();
+		if (getIsRotationMontPlaying())
+		{
+			float ratio = 0.0;
+			float SpeedRatio = 0.0;
+			if (!TurnCurveName.IsNone() && MainCharacterAnimInstance->GetCurveValue(TurnCurveName, ratio))
+			{
+				ratio = FMath::Abs(ratio);
+				//Log("Ratio is: " + FString::SanitizeFloat(ratio));
+				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0), FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
+				SetActorRotation(FRotator(0, newYaw, 0));
+				AddMovementInput(GetInputDirection(), ratio * MovementVector.Length());
+				
+
+				if (ratio >= 0.99)
+				{
+					SetActorRotation(FRotator(0, characterFinalYawRotation, 0));
+					bStartCharcterMovementRotation = false;
+					if (getIsRotationMontPlaying())
+					{
+						MainCharacterAnimInstance->StopAllMontages(0.2);
+					}
+				}
+			}
+			
+			
+			currentCharacterRotationTime += DeltaTime;
+		}
+		else
+		{
+			float ratio = currentCharacterRotationTime / targetCurrentRotationTime;
+			float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0), FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
+
+			if (ratio >= 0.99)
+			{
+				SetActorRotation(FRotator(0, characterFinalYawRotation, 0));
+				bStartCharcterMovementRotation = false;
+			}
+			currentCharacterRotationTime += DeltaTime;
+		}
 		return;
 	}
-	
+
+	if (MovementVector.Length() < 0.5)
+	{
+		if (MovementVector.Length() > 0.25)
+		{
+			SetActorRotation(GetInputDirection().Rotation());
+		}
+		return;
+	}
+
+	UpdateCamera(GetWorld()->DeltaTimeSeconds);
+	idleSpringArmSpeed = movementSpringArmSpeed;
 	bStartCharcterMovementRotation = false;
+	springArmSideLength = 0.0;
+	springArmForwardLength = 0.0;
+	springArmUpLength = 0.0;
 	if (Controller != nullptr)
 	{
 		// find out which way is forward
@@ -760,10 +860,30 @@ void ADemonCharacter::Move(const FInputActionValue& Value)
 		// get right vector 
 		const FVector RightDirection = UKismetMathLibrary::GetRightVector(XYRotation);
 
-
+		bool useLeanMove = true;
+		
 		// add movement 
-		AddMovementInput(RightDirection, MovementVector.X);
-		AddMovementInput(ForwardDirection, MovementVector.Y);
+		if (useLeanMove)
+		{
+			float RInterpSpeed = 20.0;
+			
+			const FVector TotalDirection = GetInputDirection();
+
+			const FRotator DesiredRotation = UKismetMathLibrary::RInterpTo(GetActorRotation(), TotalDirection.Rotation(), GetWorld()->DeltaTimeSeconds, RInterpSpeed);
+			if (!MainCharacterAnimInstance->IsAnyMontagePlaying())
+			{
+				SetActorRotation(DesiredRotation);
+			}
+
+			//UKismetSystemLibrary::DrawDebugArrow(this, GetActorLocation(), GetActorLocation() + TotalDirection * 100,50,FLinearColor::Blue);
+			AddMovementInput(DesiredRotation.Vector(), MovementVector.Length());
+		}
+		else
+		{
+			AddMovementInput(RightDirection, MovementVector.X);
+			AddMovementInput(ForwardDirection, MovementVector.Y);
+		}
+		
 	}
 	
 	if (getCanCancelAnimMontage())
@@ -782,10 +902,10 @@ void ADemonCharacter::Move(const FInputActionValue& Value)
 void ADemonCharacter::SoftLock(float DeltaTime)
 {
 	int radius = 200;
-	TArray<AActor*> actors = GetActorsFromSphere(radius);
+	TArray<AActor*> actors = GetActorsFromSphere(AEnemy::StaticClass(),radius);
 	while (radius < 1200 && actors.Num() < 2)
 	{
-		actors = GetActorsFromSphere(radius);
+		actors = GetActorsFromSphere(AEnemy::StaticClass(),radius);
 		radius += 200;
 	}
 	if (actors.Num() == 0)
@@ -795,6 +915,7 @@ void ADemonCharacter::SoftLock(float DeltaTime)
 	float bestAngle = -1.0;
 	AEnemy* selectedEnemy = nullptr;
 	FVector vectToComp = GetActorForwardVector();
+	float bestDistance = 0.0;
 	if (GetInputDirection().Size() > 0.0)
 	{
 		vectToComp = GetInputDirection();
@@ -803,6 +924,19 @@ void ADemonCharacter::SoftLock(float DeltaTime)
 	{
 		if (AEnemy* enemy = Cast<AEnemy>(actor))
 		{
+			if (!selectedEnemy)
+			{
+				selectedEnemy = enemy;
+				continue;
+			}
+
+			float distance = FVector::Dist(GetActorLocation(), enemy->GetActorLocation());
+			if(distance < bestDistance)
+			{
+				bestDistance = distance;
+				selectedEnemy = enemy;
+			}
+			continue;
 			FVector enemyToCharVect = enemy->GetActorLocation() - GetActorLocation();
 			enemyToCharVect.Normalize();
 			
@@ -840,12 +974,29 @@ void ADemonCharacter::SoftLock(float DeltaTime)
 void ADemonCharacter::PlayerDodge()
 {
 	Log("Player Dodge commence");
+	if (getHitReactionMontageIsActive())
+	{
+		return;
+	}
+	if (MovementState == EDemonMovementState::MS_Glide)
+	{
+		return;
+	}
 	if (!playerCanDodge)
 	{
 		return;
 	}
-	if (getHitReactionMontageIsActive())
+	if (GetInputDirection().Size() > 0.0 && 0)
 	{
+		CancelAllDelay();
+		MovementState = EDemonMovementState::MS_Glide;
+		Log("Starting Dodge Glide");
+		float T = PlayMontage(DodgeGlideStartMontage);
+		if (T > 0.0)
+		{
+			T += DodgeGlideLength;
+			Delay(T, "EndDodgeGlide");
+		}
 		return;
 	}
 	if (DodgeMontageArray.Num() == 0)
@@ -853,7 +1004,7 @@ void ADemonCharacter::PlayerDodge()
 		Log("No dodge attacks");
 		return;
 	}
-	int dodgeIndex = FMath::Rand() % DodgeMontageArray.Num();
+	int dodgeIndex = 0;
 	if (!DodgeMontageArray.IsValidIndex(dodgeIndex))
 	{
 		Log("Not valid random index?");
@@ -865,6 +1016,22 @@ void ADemonCharacter::PlayerDodge()
 	FOnMontageEnded BlendOutDelegate;
 	BlendOutDelegate.BindUObject(this, &ADemonCharacter::PlayerDodgeEnd);
 	GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, DodgeMontage);
+}
+void ADemonCharacter::UpdateDodgeGlide(float DeltaTime)
+{
+	if (MovementState != EDemonMovementState::MS_Glide)
+	{
+		return;
+	}
+	FVector Direction = GetActorForwardVector();
+	float speed = DodgeGlideSpeed;
+
+	GetCharacterMovement()->Velocity = speed * Direction;
+}
+void ADemonCharacter::EndDodgeGlide()
+{
+	MovementState = EDemonMovementState::MS_Normal;
+	Log("Endinging Dodge Glide");
 }
 bool ADemonCharacter::getJumpButtonisPressed()
 {
@@ -884,11 +1051,19 @@ void ADemonCharacter::Landed(const FHitResult& Hit)
 	Log("Landed");
 	if (!bIsClimbing)
 	{
-		PlayMontage(JumpLandMontage);
+		if (GetInputDirection().Size() > 0)
+		{
+			PlayMontage(JumpLandMontage, "LandRun",1.25);
+		}
+		else
+		{
+			PlayMontage(JumpLandMontage);
+			
+		}
+		setCanCancelAnimMontage();
 	}
 	bCharacterlanded = true;
 	bCycleRunnigJumpMirror = !bCycleRunnigJumpMirror;
-	setCanCancelAnimMontage();
 	ToggleBoost(true, false);
 }
 void ADemonCharacter::UpdateHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug)
@@ -900,72 +1075,71 @@ void ADemonCharacter::UpdateHitbox(float deltaTime, bool bEnableRightPunch, bool
 }
 void ADemonCharacter::StartHitbox(float deltaTime,bool bEnableRightPunch,bool enableDebug )
 {
-	if (!bEnableHitBox)
+	if (!GetIsAttackAnimationPlaying())
 	{
-		return;
+		if (actorsHit.Num() > 0)
+		{
+			actorsHit.Empty();
+		}
 	}
 
-	//Should be one of the hand locations
-	FName SocketName = "";
-	TArray<FString> AttackTags;
-	bool bEnableLeftKick = false;
-	bool bEnableLeftPunch = false;
-	bool bEnableRightKick = false;
-	if (GetIsAttackAnimationPlaying())
+	try
 	{
-		FString str = *AttackMontageMap.Find(GetCurrentMontage());
-		str.ParseIntoArray(AttackTags, TEXT(","), true);
-		bEnableRightPunch = str.Contains("Right") && str.Contains("Punch");
-		bEnableRightKick = str.Contains("Right") && str.Contains("Kick");
-		bEnableLeftKick = str.Contains("Left") && str.Contains("Kick") ;
-		bEnableLeftPunch = str.Contains("Left") && str.Contains("Punch");
+		FName SocketName;
+		
+		TArray<FAnimNotifyEvent> fAnimNotifyEvents = MainCharacterAnimInstance->ActiveAnimNotifyState;
+
+		if (fAnimNotifyEvents.Num() == 0)
+		{
+			actorsHit.Empty();
+		}
+		
+		bool isFound = false;
+
+		for (FAnimNotifyEvent fAnimNotifyEvent : fAnimNotifyEvents)
+		{
+			FString notifyName = fAnimNotifyEvent.NotifyName.ToString();
+
+			if (notifyName.Equals("LeftPunchNotifyState"))
+			{
+				SocketName = LeftHandSocketName;
+			}
+			if (notifyName.Equals("RightPunchNotifyState"))
+			{
+				SocketName = RightHandSocketName;
+			}
+			if (notifyName.Equals("LeftKickNotifyState"))
+			{
+				SocketName = LeftFootSocketName;
+			}
+			if (notifyName.Equals("RightKickNotifyState"))
+			{
+				SocketName = RightFootSocketName;
+			}
+
+			AttackHitbox(SocketName);
+
+			if (!SocketName.IsNone())
+			{
+				isFound=true;
+				
+			}
+		}
+
+		if (!isFound)
+		{
+			actorsHit.Empty();
+		}
+		
 	}
+	catch (const std::exception& e)
+	{
+		Log(e.what());
+	}
+	//Should be one of the hand locations
 	
-	bool containsAllSockets = GetMesh()->GetAllSocketNames().Contains(RightHandSocketName) && GetMesh()->GetAllSocketNames().Contains(LeftHandSocketName) &&
-		GetMesh()->GetAllSocketNames().Contains(RightFootSocketName) && GetMesh()->GetAllSocketNames().Contains(LeftHandSocketName);
-
-	if (!containsAllSockets)
-	{
-		Log(enableDebug ? "Not all attack sockets are named or not named correctyly":"");
-		return;
-	}
-
-	if (bEnableRightPunch)
-	{
-		SocketName = RightHandSocketName;
-	}
-	if (bEnableLeftPunch)
-	{
-		SocketName = LeftHandSocketName;
-	}
-	if (bEnableLeftKick)
-	{
-		SocketName = LeftFootSocketName;
-	}
-	if (bEnableRightKick)
-	{
-		SocketName = RightFootSocketName;
-	}
-	AttackHitbox(SocketName);
 }
-void ADemonCharacter::UpdateHitbox(float deltaTime)
-{
-	if (!bEnableHitBox)
-	{
-		return;
-	}
-	//Should be one of the hand locations
-	bool containsAllSockets = GetMesh()->GetAllSocketNames().Contains(AttackSocketName);
-
-	if (!containsAllSockets)
-	{
-		Log("Sockets are not available or not named correctyly");
-		return;
-	}
-
-	AttackHitbox(AttackSocketName);
-}
-void ADemonCharacter::AttackHitbox(FName SocketName)
+void ADemonCharacter::AttackHitbox(FName SocketName, bool bEnableDebug)
 {
 	FVector AttackPoint = GetActorLocation();
 	float zLoc = AttackPoint.Z;
@@ -995,8 +1169,10 @@ void ADemonCharacter::AttackHitbox(FName SocketName)
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
 	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, StartPoint, StartPoint + AttackCenterDist * AttackVector, 
-		radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
+	
+	radius = 30.0;
+	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, AttackPoint, AttackPoint,
+		radius, traceObjectTypes, false, actorsToIgnore, bEnableDebug ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, hitResult, true);
 	if (didHit)
 	{
 		if (AEnemy* enemy = Cast<AEnemy>(hitResult.GetActor()))
@@ -1031,6 +1207,7 @@ float ADemonCharacter::HitReact(AActor* sender)
 	{
 		Log("HitRection montage no good");
 	}
+	float T = 0.0;
 	auto vector = GetActorLocation() - sender->GetActorLocation();
 	FName sectionName = "Default";
 	vector.Normalize();
@@ -1045,30 +1222,65 @@ float ADemonCharacter::HitReact(AActor* sender)
 			}
 		}
 	}
-	
-	auto hitReactMontage = HitReactionMontage;
-	FOnMontageEnded BlendOutDelegate;
-	BlendOutDelegate.BindUObject(this, &ADemonCharacter::HitReactEnd);
-	GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, hitReactMontage);
-	float T = PlayMontage(hitReactMontage, sectionName);
-	if (ACharacter* character = Cast<ACharacter>(sender))
+	AEnemy* attacker = Cast<AEnemy>(sender);
+	if (attacker)
 	{
-		auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), character->GetActorLocation()).Yaw;
+		auto yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), attacker->GetActorLocation()).Yaw;
 
 		auto newRot = GetActorRotation();
 		newRot.Yaw = yaw;
 		if (sectionName.IsEqual("HitBack"))
 		{
-			newRot.Yaw = character->GetActorRotation().Yaw;
+			newRot.Yaw = attacker->GetActorRotation().Yaw;
 		}
 		//MoveCharacterToRotationAndLocationIninterval(GetActorLocation(), newRot, hitReactMontage->GetDefaultBlendInTime());
 		SetActorRotation(newRot);
-	}
 
+		UAnimMontage* mont = GetCurrentMontage();
+		auto hitReactMontage = HitReactionMontage;
+
+
+		if (BlockParryChainMap.Contains(mont))
+		{
+			MainCharacterAnimInstance->ActiveAnimNotifyState;
+
+			bool isFound = false;
+			for (auto animNotifyState : MainCharacterAnimInstance->ActiveAnimNotifyState)
+			{
+				if (animNotifyState.NotifyName.IsEqual("ParryWindowNotifyState") && bPlayerCanParry)
+				{
+					hitReactMontage = *BlockParryChainMap.Find(mont);
+					Log("Parry");
+					isFound = true;
+					attacker->setCanHitReact(true);
+					attacker->HitReact(this);
+					//PlayAnimMontage(*BlockParryChainMap.Find(mont));
+				}
+				else
+				{
+					//bPlayerCanParry = false;
+				}
+			}
+
+			if (BlockReactArray.Num() > 0 && !isFound)
+			{
+				const int lastIndex = BlockReactArray.Num() - 1;
+				hitReactMontage = BlockReactArray[lastIndex];
+			}
+		}
+
+		T = BindAndPlayMontage(hitReactMontage, "HitReactEnd");
+	}
+	
+	
 	return T;
 }
 void ADemonCharacter::HitReactEnd(UAnimMontage* animMontage, bool bInterrupted)
 {
+	if (bRightMouseButtonIsPressed)
+	{
+		RightMouseClick();
+	}
 }
 
 void ADemonCharacter::AttackRushEnd(UAnimMontage* animMontage, bool bInterrupted)
@@ -1110,51 +1322,7 @@ void ADemonCharacter::UpdateWallclimb(float DeltaTime)
 }
 void ADemonCharacter::UpdateMovementRotation(float DeltatTime)
 {
-	if (bStartCharcterMovementRotation)
-	{
-		Log("Turning?");
-		float ratio = currentCharacterRotationTime / targetCurrentRotationTime;
-		if (GetCurrentMontage())
-		{
-			auto MyMontage = GetCurrentMontage();
-			if (MainCharacterAnimInstance->GetCurveValue("CharacterRotationCurve", ratio))
-			{
-				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0), 
-					FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
-				
-				SetActorRotation(FRotator(0, newYaw, 0));
-				if (ratio >= 0.99)
-				{
-					SetActorRotation(FRotator(0, characterFinalYawRotation, 0));
-					bStartCharcterMovementRotation = false;
-				}
-			}
-			else
-			{
-				Log("Could not find curve value");
-			}
-			
-		}
-		else
-		{
-			if (currentCharacterRotationTime >= targetCurrentRotationTime)
-			{
-				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0),
-					FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
-				SetActorRotation(FRotator(0, characterFinalYawRotation, 0));
-				bStartCharcterMovementRotation = false;
-				return;
-			}
-			else
-			{
-				float newYaw = UKismetMathLibrary::RLerp(FRotator(0, characterInitialYawRotation, 0),
-					FRotator(0, characterFinalYawRotation, 0), ratio, true).Yaw;
-				SetActorRotation(FRotator(0, newYaw, 0));
-				bStartCharcterMovementRotation = false;
-			}
-		}
-		currentCharacterRotationTime += DeltatTime;
-	}
+	
 }
 bool ADemonCharacter::GetIsAttackAnimationPlaying()
 {
@@ -1180,36 +1348,4 @@ bool ADemonCharacter::GetIsDodgeAnimationPlaying()
 	}
 	return DodgeMontageArray.Contains(GetCurrentMontage());
 }
-TArray<AActor*> ADemonCharacter::GetActorsFromSphere(float radius,bool enableDebug)
-{
-	TArray<FHitResult> Results;
 
-	// Set what actors to seek out from it's collision channel
-	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
-	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-
-	// Ignore any specific actors
-	TArray<AActor*> ignoreActors;
-	// Ignore self or remove this line to not ignore any
-	ignoreActors.Init(this, 1);
-
-	// Array of actors that are inside the radius of the sphere
-	TArray<AActor*> outActors;
-
-	// Total radius of the sphere
-	
-	// Sphere's spawn loccation within the world
-	FVector sphereSpawnLocation = GetActorLocation();
-	// Class that the sphere should hit against and include in the outActors array (Can be null)
-	UClass* seekClass = AEnemy::StaticClass(); // NULL;
-
-	if (enableDebug)
-	{
-		UKismetSystemLibrary::DrawDebugSphere(this, GetActorLocation(), radius);
-	}
-	
-
-	UKismetSystemLibrary::SphereOverlapActors(GetWorld(), sphereSpawnLocation, radius, traceObjectTypes, seekClass, ignoreActors, outActors);
-
-	return outActors;
-}

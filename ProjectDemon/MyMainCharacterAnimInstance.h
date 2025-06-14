@@ -52,7 +52,8 @@ public:
 
 
 	
-	
+	UFUNCTION(BlueprintCallable)
+	void SetEnableMorphTargets(TMap<FName,float> MorphTargetNameMap, TMap<FName, bool> MorphEnableOscillateMap);
 
 	
 	UFUNCTION(BlueprintCallable)
@@ -60,15 +61,18 @@ public:
 	UFUNCTION(BlueprintCallable)
 		void Blink();
 
+	void UpdateBlink(float DeltaTime);
+
 	bool bEnableMirror = false;
 	UFUNCTION(BlueprintCallable)
 		void setEnableMirror(bool EnableMirror);
 	UFUNCTION(BlueprintCallable,BlueprintPure)
 	bool getEnableMirror();
-	
-	float blinkVal = 0.0;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName BlinkCurve = "EyesClosedCurve";
+	float maxBlinkVal = 1.0;
 	FTimerHandle blinkTimer;
 	bool bEyesClosed = false;
 	float currentBlinkValue = 0.0;
-
+	
 };

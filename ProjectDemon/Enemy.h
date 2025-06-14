@@ -54,7 +54,7 @@ public:
 
 	void StartHitbox(float deltaTime, bool bEnableRightPunch = true, bool enableDebug=false);
 
-	void AttackHitbox(FName SocketName);
+	void AttackHitbox(FName SocketName, bool bEnableDebug = false);
 
 	void SwordHitbox(FName SocketInitName, FName SocketFinalName);
 private:

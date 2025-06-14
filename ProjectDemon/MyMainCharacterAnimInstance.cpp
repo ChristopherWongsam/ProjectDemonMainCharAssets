@@ -41,6 +41,8 @@ void UMyMainCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	}
 	bIsMoving = MyChar->GetInputDirection().Size() > 0.0;
 	bRunJumpCycle = MyChar->bCycleRunnigJumpMirror;
+	
+	UpdateBlink(DeltaSeconds);
 }
 void UMyMainCharacterAnimInstance::AimOffset(const FVector& Location, const FRotator& Rotation,FName Bone)
 {
@@ -67,6 +69,32 @@ void UMyMainCharacterAnimInstance::AimOffset(const FVector& Location, const FRot
 	return;
 }
 
+void UMyMainCharacterAnimInstance::SetEnableMorphTargets(TMap<FName, float> MorphTargetNameMap, TMap<FName, bool> MorphEnableOscillateMap)
+{
+	float DeltaTime = GetWorld()->DeltaTimeSeconds;
+
+	for (TPair<FName, float> Elem : MorphTargetNameMap)
+	{
+		float morphValue = Elem.Value;
+		FName morphName = Elem.Key;
+		if (morphValue > 1.0)
+		{
+			morphValue = 1.0;
+		}
+
+		if (Elem.Value < 0.0)
+		{
+			morphValue = 0.0;
+		}
+
+		SetMorphTarget(morphName, morphValue);
+		if (MorphEnableOscillateMap.Contains(morphName))
+		{
+			
+		}
+	}
+}
+
 void UMyMainCharacterAnimInstance::startBlink()
 {
 
@@ -75,28 +103,40 @@ void UMyMainCharacterAnimInstance::startBlink()
 
 void UMyMainCharacterAnimInstance::Blink()
 {
-	if (USkeletalMeshComponent* Component = GetOwningComponent())
-	{
-		if (Component->GetMorphTarget("EyesClosedCurve") == 0.0) 
-		{
-			return;
-		}
-	}
+	FName morphCurve = BlinkCurve;
+	
 	if (bEyesClosed)
 	{
 		float T = UKismetMathLibrary::RandomFloatInRange(5.0, 7.0);
 		bEyesClosed = !bEyesClosed;
-		SetMorphTarget("EyesClosedCurve", 0.0);
+		
+		//SetMorphTarget(morphCurve, 0.0);
 		GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::Blink, T);
-		return;
 	}
-	float T = UKismetMathLibrary::RandomFloatInRange(0.2, 0.5);
-	SetMorphTarget("EyesClosedCurve", 1.0);
-	bEyesClosed = !bEyesClosed;
-	GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::Blink, T);
-	return;
+	else
+	{
+		float T = UKismetMathLibrary::RandomFloatInRange(0.2, 0.5);
+		//SetMorphTarget(morphCurve, 1.0);
+		bEyesClosed = !bEyesClosed;
+		GetWorld()->GetTimerManager().SetTimer(blinkTimer, this, &UMyMainCharacterAnimInstance::Blink, T);
+	}
 }
+void UMyMainCharacterAnimInstance::UpdateBlink(float DeltaTime)
+{
+	FName morphCurve = BlinkCurve;
 
+	if (bEyesClosed)
+	{
+		currentBlinkValue = UKismetMathLibrary::FInterpTo_Constant(currentBlinkValue, maxBlinkVal, DeltaTime, 20.0);
+		SetMorphTarget(morphCurve, currentBlinkValue);
+		
+	}
+	else
+	{
+		currentBlinkValue = UKismetMathLibrary::FInterpTo_Constant(currentBlinkValue, 0.0, DeltaTime, 20.0);
+		SetMorphTarget(morphCurve, currentBlinkValue);
+	}
+}
 void UMyMainCharacterAnimInstance::setEnableMirror(bool EnableMirror)
 {
 	bEnableMirror = EnableMirror;

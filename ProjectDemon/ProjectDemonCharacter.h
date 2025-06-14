@@ -114,6 +114,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = Movement)
 	UAnimMontage* TurnBackRightMontage;
 
+	UPROPERTY(EditAnywhere, Category = Movement)
+	FName TurnCurveName = "CharacterRotationCurve";
+	UPROPERTY(EditAnywhere, Category = Movement)
+	FName MoveSpeedData = "MoveSpeedData";
+
 	bool isRotationSpeedSet = false;
 
 
@@ -134,5 +139,29 @@ public:
 	float CameraLagAirSpeed = 0.2;
 
 	void UpdateCamera(float DeltaTime);
+
+	float springArmSideLength = 0;
+	float springArmForwardLength = 0;
+	float springArmUpLength = 0;
+
+	float springArmSpeed = 50;
+
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float idleSpringArmDelay = 10;
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float idleSpringArmSpeed = 10;
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float movementSpringArmSpeed = 50;
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float idleSpringArmSideLength = 50;
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float idleSpringArmForwardLength = 300;
+	UPROPERTY(EditAnywhere, category = "Camera")
+	float idleSpringArmUpLength = 100;
+	//USpringArmComponent SpringArmComp;
+	void UpdateCameraArmLength(float DeltaTime);
+
+	UFUNCTION()
+	void EnableZoomToChar();
 };
 

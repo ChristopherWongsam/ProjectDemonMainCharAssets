@@ -204,6 +204,7 @@ FVector AProjectDemonCharacter::GetInputDirection()
 
 	return InputDirection;
 }
+
 void AProjectDemonCharacter::UpdateCamera(float DeltaTime)
 {
 	if (InAir() && GetVelocity().X == 0.0 && GetVelocity().Y == 0.0)
@@ -214,7 +215,7 @@ void AProjectDemonCharacter::UpdateCamera(float DeltaTime)
 	{
 		GetCameraBoom()->CameraLagSpeed = CameraLagFloorSpeed;
 	}
-	if (getSpeed() != 0.0)
+	if (getSpeed() != 0.0 && 1)
 	{
 		float Val = 0.0;
 
@@ -237,6 +238,20 @@ void AProjectDemonCharacter::UpdateCamera(float DeltaTime)
 
 		AddControllerYawInput(Val);
 	}
+	UpdateCameraArmLength(DeltaTime);
 	
-	
+}
+
+void AProjectDemonCharacter::UpdateCameraArmLength(float DeltaTime)
+{
+	FVector targetVect = FVector(springArmForwardLength, springArmSideLength, springArmUpLength);
+	CameraBoom->SocketOffset = UKismetMathLibrary::VInterpTo_Constant(CameraBoom->SocketOffset, targetVect, DeltaTime,springArmSpeed);
+}
+
+
+void AProjectDemonCharacter::EnableZoomToChar()
+{
+	springArmSideLength = 50;
+	springArmForwardLength = 350;
+	springArmUpLength = 50;
 }

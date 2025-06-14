@@ -15,6 +15,7 @@ void AEnemyAIController::BeginPlay()
 	{
 		return;
 	}
+	return;
 	if (EnemyBT && Enemy->bEnemyCanAttack)
 	{
 		RunBehaviorTree(EnemyBT);

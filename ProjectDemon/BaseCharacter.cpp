@@ -121,7 +121,6 @@ float ABaseCharacter::PlayMontage(UAnimMontage* Montage, FName Section, float ra
 	}
 	else
 	{
-		Log("Cannot play montage!");
 		return -1.0;
 	}
 }
@@ -133,6 +132,19 @@ void ABaseCharacter::BindMontage(UAnimMontage* Montage, FName functionName)
 		BlendOutDelegate.BindUFunction(this, functionName);
 		GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, Montage);
 	}
+}
+
+float ABaseCharacter::BindAndPlayMontage(UAnimMontage* Montage, FName functionName)
+{
+	if (Montage)
+	{
+		float T = PlayMontage(Montage);
+		FOnMontageEnded BlendOutDelegate;
+		BlendOutDelegate.BindUFunction(this, functionName);
+		GetMesh()->GetAnimInstance()->Montage_SetBlendingOutDelegate(BlendOutDelegate, Montage);
+		return T;
+	}
+	return 0.0;
 }
 
 bool ABaseCharacter::SphereTrace(FVector StartPoint, FVector EndPoint, float sphereRadius, ETraceTypeQuery traceTypeQuery, TArray<AActor*> ActorsToIgnore, int trace, FHitResult& HitResult, bool traceComplex, bool ignoreSelf)
@@ -234,13 +246,13 @@ void ABaseCharacter::cancelMoveCharacterToRotationAndLocationIninterval()
 ETurnState ABaseCharacter::TurnInPlace(FRotator CameraRotation)
 {
 	FRotator DeltaRotator = UKismetMathLibrary::NormalizedDeltaRotator(CameraRotation, GetActorRotation());
-
-	if (DeltaRotator.Yaw > 90.0 && DeltaRotator.Yaw <= 135)
+	Log("The delta yaw is: " + FString::SanitizeFloat(DeltaRotator.Yaw));
+	if (DeltaRotator.Yaw > 75 && DeltaRotator.Yaw <= 135)
 	{
 		//Play right
 		return ETurnState::ETS_Right;
 	}
-	else if(DeltaRotator.Yaw < -90.0 && DeltaRotator.Yaw >= -135.0)
+	else if(DeltaRotator.Yaw < -75.0 && DeltaRotator.Yaw >= -135.0)
 	{
 		//Play left
 		return ETurnState::ETS_Left;
@@ -306,9 +318,10 @@ float ABaseCharacter::InterpValueTime(float currentValue, float targetValue, flo
 	}
 }
 
-void ABaseCharacter::setEnableHitbox(bool enableHitbox)
+void ABaseCharacter::setEnableHitbox(bool enableHitbox, EHitBoxType HitBoxType)
 {
 	bEnableHitBox = enableHitbox;
+	this->hitBoxType = HitBoxType;
 	if (!bEnableHitBox)
 	{
 		actorsHit.Empty();
@@ -335,4 +348,37 @@ float ABaseCharacter::getSpeed()
 bool ABaseCharacter::InAir() const
 {
 	return GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Falling || GetCharacterMovement()->MovementMode == EMovementMode::MOVE_Flying;
+}
+TArray<AActor*> ABaseCharacter::GetActorsFromSphere(UClass* classType, float radius, bool enableDebug)
+{
+	TArray<FHitResult> Results;
+
+	// Set what actors to seek out from it's collision channel
+	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
+	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
+
+	// Ignore any specific actors
+	TArray<AActor*> ignoreActors;
+	// Ignore self or remove this line to not ignore any
+	ignoreActors.Init(this, 1);
+
+	// Array of actors that are inside the radius of the sphere
+	TArray<AActor*> outActors;
+
+	// Total radius of the sphere
+
+	// Sphere's spawn loccation within the world
+	FVector sphereSpawnLocation = GetActorLocation();
+	// Class that the sphere should hit against and include in the outActors array (Can be null)
+	//UClass* seekClass = AEnemy::StaticClass(); // NULL;
+	UClass* seekClass = classType;
+	if (enableDebug)
+	{
+		UKismetSystemLibrary::DrawDebugSphere(this, GetActorLocation(), radius);
+	}
+
+
+	UKismetSystemLibrary::SphereOverlapActors(GetWorld(), sphereSpawnLocation, radius, traceObjectTypes, seekClass, ignoreActors, outActors);
+
+	return outActors;
 }

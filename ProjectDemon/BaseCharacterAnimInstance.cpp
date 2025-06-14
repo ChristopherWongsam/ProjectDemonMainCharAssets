@@ -87,7 +87,7 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataAtFrame(UAnimMontage* Monta
 				auto T = animSequence->GetTimeAtFrame(frame);
 				FSkeletonPoseBoneIndex BoneIndex(0);
 				animSequence->GetBoneTransform(OutAtom, BoneIndex, T, true);
-				Log("Root motion index is: " + OutAtom.GetLocation().ToString());
+				Log("Root motion index is: " + OutAtom.GetLocation().ToString());	
 			}
 
 		}
@@ -98,6 +98,32 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataAtFrame(UAnimMontage* Monta
 	}
 	return FVector::ZeroVector;
 }
+const UAnimSequence* UBaseCharacterAnimInstance::GetCurrentAnimSequenceFromMontage()
+{
+	UAnimMontage* Montage = GetCurrentActiveMontage();
+	if (!GetCurrentActiveMontage())
+	{
+		return nullptr;
+	}
+	Montage_GetPosition(Montage);
+	for (auto section : Montage->CompositeSections)
+	{
+		Montage_GetCurrentSection();
+		if (Montage_GetCurrentSection() == section.SectionName)
+		{
+			if (const UAnimSequence* animSequence = Cast<UAnimSequence>(section.GetLinkedSequence()))
+			{
+				
+			}
+
+		}
+		else
+		{
+			//Log("Invalid animation");
+		}
+	}
+	return nullptr;
+}
 FVector UBaseCharacterAnimInstance::getRootMotionDataFromActiveMontage(float time)
 {
 	const UAnimMontage* Montage = GetCurrentActiveMontage();
@@ -106,7 +132,7 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataFromActiveMontage(float tim
 		return FVector::ZeroVector;
 	}
 	float totalTime = 0.0;
-	for (auto section : Montage->CompositeSections)
+	for (FCompositeSection section : Montage->CompositeSections)
 	{
 		if (Montage_GetCurrentSection() == section.SectionName)
 		{
@@ -123,9 +149,10 @@ FVector UBaseCharacterAnimInstance::getRootMotionDataFromActiveMontage(float tim
 						return OutAtom.GetLocation();
 					}
 				}
+				totalTime +=  animSequence->GetPlayLength();
 			}
 		}
-		totalTime += section.GetTime();
+		
 	}
 	return FVector::ZeroVector;
 }
@@ -170,12 +197,13 @@ void UBaseCharacterAnimInstance::UpdateMontageRootMotion(float DeltaTime)
 				Offset.X * AnimCharRightVector * rootMotionVectorScale.X;
 			FVector Velocity = (NewCharacterLocation - AnimCharacter->GetActorLocation()) / DeltaTime;
 			AnimCharacter->GetCharacterMovement()->Velocity = Velocity;
-			AnimCharacter->GetCharacterMovement()->bOrientRotationToMovement = false;
+			//AnimCharacter->GetCharacterMovement()->bOrientRotationToMovement = false;
 		}
 		else
 		{
-			AnimCharacter->GetCharacterMovement()->bOrientRotationToMovement = true;
+			//AnimCharacter->GetCharacterMovement()->bOrientRotationToMovement = true;
 			bEnableRootMotionModifier = false;
+			AnimCharacter->GetCharacterMovement()->StopMovementImmediately();
 		}
 	}
 }

@@ -35,6 +35,8 @@ public:
 	UFUNCTION(BlueprintCallable)
 	FVector getRootMotionDataAtFrame(UAnimMontage* Montage, int frame);
 
+	const UAnimSequence* GetCurrentAnimSequenceFromMontage();
+
 	FVector getRootMotionDataFromActiveMontage(float time);
 
 	FVector getRootMotionDataFromActiveMontage();
@@ -53,6 +55,7 @@ private:
 	FVector rootMotionVectorScale;
 
 public:
+	/** Binds Montage to a root modifier. Currently only works if root motion is set to "Force Root Lock". Only works on single montage **/
 	void bindMontageRootMotionModifier(UAnimMontage* Montage, float rootMotionScale);
 	void bindMontageRootMotionModifier(UAnimMontage* Montage, FVector vectorScale = FVector(1));
 	void UpdateMontageRootMotion(float DeltaTime);

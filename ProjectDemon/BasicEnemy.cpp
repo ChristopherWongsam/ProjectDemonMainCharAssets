@@ -4,6 +4,11 @@
 #include <Kismet/KismetSystemLibrary.h>
 #include "BasicEnemy.h"
 
+void ABasicEnemy::BeginPlay()
+{
+	Super::BeginPlay();
+}
+
 void ABasicEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -13,7 +18,7 @@ void ABasicEnemy::Tick(float DeltaTime)
 
 void ABasicEnemy::UpdateHeadFindPlayer(float DeltaTime)
 {
-	if (bPlayerFound)
+	if (bPlayerFound || !bEnemyCanAttack)
 	{
 		return;
 	}
@@ -27,18 +32,15 @@ void ABasicEnemy::UpdateHeadFindPlayer(float DeltaTime)
 	EndPoint.Normalize();
 	FHitResult hitResult;
 
-	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
-	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, headOrigin, GetActorForwardVector() * 2000 + headOrigin, 25, 
-																	traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
-
-	if (didHit)
+	TArray<AActor*> actors = GetActorsFromSphere(ADemonCharacter::StaticClass(), 2500);
+	if (actors.Num() > 0)
 	{
-		if (ADemonCharacter* enemy = Cast<ADemonCharacter>(hitResult.GetActor()))
+		if (ADemonCharacter* enemy = Cast<ADemonCharacter>(actors[0]))
 		{
 			Log("Main Character found");
 			bPlayerFound = true;
 			EnemyController->MoveToActor(hitResult.GetActor(), 20.0);
+			setEnableCharacterToTargetRotation(true);
 		}
 	}
 }
@@ -55,9 +57,8 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 
 	float playerToEnemyDistance = FVector::Dist(MyPlayerCharacter->GetActorLocation(), GetActorLocation());
 	float yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
-
-	SetActorRotation(FRotator(0, yaw, 0));
-	if (playerToEnemyDistance > EnemyAttackRange)
+	
+	if (playerToEnemyDistance > EnemyRadiusRange)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = 500;
 		EnemyController->MoveToActor(MyPlayerCharacter, 1.0);
@@ -70,58 +71,126 @@ void ABasicEnemy::UpdateMoveToPlayer(float DeltaTime)
 		EnemyController->StopMovement();
 	}
 
-	if (playerToEnemyDistance <= EnemyAttackRange)
+	if (playerToEnemyDistance <= EnemyRadiusRange)
 	{
+		
+
 		if (!bEnablePlayerRangeDecsion)
 		{
 			return;
 		}
-		if (getSpeed() == 0.0 && !EnemyAnimInstance->Montage_IsActive(DodgeMontage) && !EnemyAnimInstance->Montage_IsActive(LightAttack))
+
+		try
 		{
-			int chance = UKismetMathLibrary::RandomInteger64InRange(0, 1);
-			if (0)
+			if (HitReactMontageArray.Contains(GetCurrentMontage()))
 			{
-				if (DodgeMontage) 
+				return;
+			}
+			if (playerToEnemyDistance <= EnemyAttackRange)
+			{
+				if (!EnemyAnimInstance->Montage_IsActive(LightAttack))
 				{
-					FName dodgeSection = UKismetMathLibrary::RandomInteger64InRange(0, 1) == 0 ? "Default" : "DodgeRight";
-					PlayMontage(DodgeMontage, dodgeSection);
-					BindMontage(DodgeMontage, "OnDodgeEnd");
+
+					FRotator newRot = GetActorRotation();
+					newRot.Yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
+					SetActorRotation(newRot);
+					Attack();
+					EnemyController->StopMovement();
+					return;
+				}
+				EnemyController->StopMovement();
+				return;
+			}
+
+			if (!EnemyAnimInstance->Montage_IsActive(LightAttack) &&
+				!DodgMontageChainMap.Contains(EnemyAnimInstance->GetCurrentActiveMontage()))
+			{
+				UAnimMontage* dodgeMont = nullptr;
+				//Log("Decision time");
+				bool chance = UKismetMathLibrary::RandomBool();
+				if (chance)
+				{
+					dodgeMont = DodgeFowLeftMontage;
+				}
+				else
+				{
+					dodgeMont = DodgeFowRightMontage;
+				}
+
+				if (dodgeMont && DodgMontageChainMap.Contains(dodgeMont))
+				{
+
+				}
+
+				if (dodgeMont && DodgMontageChainMap.Contains(dodgeMont))
+				{
+					setEnableCharacterToTargetRotation(false);
+					PlayMontage(dodgeMont);
+					EnemyAnimInstance->bindMontageRootMotionModifier(dodgeMont, DodgeMovementScale);
+					BindMontage(dodgeMont, "OnDodgeEnd");
+				}
+				else
+				{
+					EnemyController->MoveToActor(MyPlayerCharacter, 1.0);
 				}
 			}
-			else if(0)
-			{
-				bEnablePlayerRangeDecsion = false;
-				float waitTime = UKismetMathLibrary::RandomFloatInRange(1.0, 2.0);
-				Delay(waitTime, "EnablePlayerRangeDecision");
-			}
-			else
-			{
-				Attack();
-			}
 		}
+		catch (const std::exception& e)
+		{
+			Log(e.what());
+		}
+		
 	}
 }
 void ABasicEnemy::OnDodgeEnd(UAnimMontage* Montage, bool interrupted)
 {
 	LogScreen("Dodge end");
 	int chance = UKismetMathLibrary::RandomInteger64InRange(0, 2);
-	if (chance!=0)
+	setEnableCharacterToTargetRotation(false);
+
+	float playerToEnemyDistance = 0.0;
+
+	if (MyPlayerCharacter)
 	{
-		Attack();
+		playerToEnemyDistance = FVector::Dist(MyPlayerCharacter->GetActorLocation(), GetActorLocation());
 	}
-	else
+
+	if (playerToEnemyDistance <= EnemyAttackRange)
 	{
-		FName dodgeSection = UKismetMathLibrary::RandomInteger64InRange(0, 1) == 0 ? "Default" : "DodgeRight";
-		PlayMontage(DodgeMontage, dodgeSection);
-		BindMontage(DodgeMontage, "OnDodgeEnd");
+		return;
+	}
+
+	UAnimMontage* nextMontage = nullptr;
+
+	if (DodgMontageChainMap.Contains(Montage))
+	{
+		FString montName;
+		Montage->GetName(montName);
+		nextMontage = *DodgMontageChainMap.Find(Montage);
+		nextMontage->GetName(montName);
+	}
+
+	if (nextMontage && MyPlayerCharacter)
+	{
+		FRotator newRot = GetActorRotation();
+		newRot.Yaw = UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), MyPlayerCharacter->GetActorLocation()).Yaw;
+		SetActorRotation(newRot);
+
+		PlayMontage(nextMontage);
+		EnemyAnimInstance->bindMontageRootMotionModifier(nextMontage, DodgeMovementScale);
+		BindMontage(nextMontage, "OnDodgeEnd");
 	}
 }
 
 float ABasicEnemy::Attack()
 {
-	const float T = PlayMontage(LightAttack);
-	setCanHitReact(false);
-	return T;
+	if (LightAttack)
+	{
+		const float T = PlayMontage(LightAttack);
+		setCanHitReact(false);
+		return T;
+	}
+	return 0.0;
 }
 void ABasicEnemy::EnablePlayerRangeDecision()
 {
@@ -197,4 +266,9 @@ float ABasicEnemy::HitReact(AActor* sender)
 	}
 
 	return T;
+}
+
+void ABasicEnemy::OnAttackEnd(UAnimMontage* Montage, bool interrupted)
+{
+	setEnableCharacterToTargetRotation(true);
 }

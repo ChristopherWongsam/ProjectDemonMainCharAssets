@@ -94,34 +94,72 @@ float AEnemy::Attack()
 
 void AEnemy::StartHitbox(float deltaTime, bool bEnableRightPunch, bool enableDebug)
 {
-	
-	if (!bEnableHitBox)
-	{
-		return;
-	}
-	LogScreen("Hitbox update");
 	if (!GetIsAttackAnimationPlaying())
 	{
+		if (actorsHit.Num() > 0)
+		{
+			actorsHit.Empty();
+		}
 		return;
 	}
-	//Should be one of the hand locations
-	FName SocketName = "";
-	TArray<FString> AttackTags;
-	bool bEnableLeftKick = false;
-	bool bEnableLeftPunch = false;
-	bool bEnableRightKick = false;
-	bool bEnableRightWeapon = false;
-	
-	LogScreen("Hitbox update");
-	bool containsAllSockets = GetMesh()->GetAllSocketNames().Contains(RightWeaponSocketInitialPoint) && GetMesh()->GetAllSocketNames().Contains(RightWeaponSocketFinalPoint);
 
-	if (!containsAllSockets)
+	try
 	{
-		Log("Not all attack sockets are named or not named correctyly");
-		return;
-	}
+		FName SocketName;
+		TArray<FString> AttackTags;
+		
+		TArray<FAnimNotifyEvent> fAnimNotifyEvents = EnemyAnimInstance->ActiveAnimNotifyState;
 
-	SwordHitbox(RightWeaponSocketInitialPoint, RightWeaponSocketFinalPoint);
+		if (fAnimNotifyEvents.Num() == 0)
+		{
+			actorsHit.Empty();
+		}
+		
+		bool isFound = false;
+
+		for (FAnimNotifyEvent fAnimNotifyEvent : fAnimNotifyEvents)
+		{
+			//Log(fAnimNotifyEvent.NotifyName.ToString());
+			FString notifyName = fAnimNotifyEvent.NotifyName.ToString();
+
+			if (notifyName.Equals("LeftPunchNotifyState"))
+			{
+				SocketName = LeftHandSocketName;
+			}
+			if (notifyName.Equals("RightPunchNotifyState"))
+			{
+				SocketName = RightHandSocketName;
+			}
+			if (notifyName.Equals("LeftKickNotifyState"))
+			{
+				SocketName = LeftFootSocketName;
+			}
+			if (notifyName.Equals("RightKickNotifyState"))
+			{
+				SocketName = RightFootSocketName;
+			}
+			if (!SocketName.IsNone())
+			{
+				isFound = true;
+				AttackHitbox(SocketName, true);
+			}
+			if (notifyName.Equals("SwordAttackNotifyState"))
+			{
+				SwordHitbox(this->RightWeaponSocketInitialPoint, this->RightWeaponSocketFinalPoint);
+				isFound = true;
+			}
+		}
+
+		if (!isFound)
+		{
+			actorsHit.Empty();
+		}
+
+	}
+	catch (const std::exception& e)
+	{
+		Log(e.what());
+	}
 }
 
 void AEnemy::updateCharacterRotationToTarget(float deltaTime, FVector targetLocation, bool enableDebug)
@@ -144,7 +182,7 @@ void AEnemy::updateCharacterRotationToTarget(float deltaTime, FVector targetLoca
 	
 }
 
-void AEnemy::AttackHitbox(FName SocketName)
+void AEnemy::AttackHitbox(FName SocketName, bool bEnableDebug)
 {
 	FVector AttackPoint = GetActorLocation();
 	float zLoc = AttackPoint.Z;
@@ -174,7 +212,7 @@ void AEnemy::AttackHitbox(FName SocketName)
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
 	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, StartPoint, StartPoint + AttackCenterDist * AttackVector, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::ForOneFrame, hitResult, true);
+	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, StartPoint, StartPoint + AttackCenterDist * AttackVector, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
 	if (didHit)
 	{
 		if (ADemonCharacter* enemy = Cast<ADemonCharacter>(hitResult.GetActor()))
@@ -184,7 +222,7 @@ void AEnemy::AttackHitbox(FName SocketName)
 				actorsHit.Add(enemy);
 				enemy->HitReact(this);
 				Log("Main Character hit");
-				DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
+				//DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
 			}
 		}
 	}
@@ -200,7 +238,7 @@ void AEnemy::SwordHitbox(FName SocketInitName, FName SocketFinalName)
 
 	TArray<TEnumAsByte<EObjectTypeQuery>> traceObjectTypes;
 	traceObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECollisionChannel::ECC_Pawn));
-	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, AttackInitPoint, AttackFinalPoint, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::None, hitResult, true);
+	bool didHit = UKismetSystemLibrary::SphereTraceSingleForObjects(this, AttackInitPoint, AttackFinalPoint, radius, traceObjectTypes, false, actorsToIgnore, EDrawDebugTrace::ForOneFrame, hitResult, true);
 	if (didHit)
 	{
 		if (ADemonCharacter* enemy = Cast<ADemonCharacter>(hitResult.GetActor()))
@@ -210,7 +248,7 @@ void AEnemy::SwordHitbox(FName SocketInitName, FName SocketFinalName)
 				actorsHit.Add(enemy);
 				enemy->HitReact(this);
 				Log("Main Character hit");
-				//DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
+				DrawDebugSphere(GetWorld(), hitResult.Location, 25, 12, FColor::Blue, false, 2.0);
 			}
 		}
 	}

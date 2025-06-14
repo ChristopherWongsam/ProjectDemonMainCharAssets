@@ -54,7 +54,7 @@ class ADemonCharacter : public AProjectDemonCharacter
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EDemonMovementState MovementState;
-	
+	ADemonCharacter();
 public:
 	/** Left Mouse Action Input Action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
@@ -136,7 +136,7 @@ public:
 
 	UFUNCTION(BlueprintPure, BlueprintCallable)
 	bool GetIsDodgeAnimationPlaying();
-	TArray<AActor*> GetActorsFromSphere(float radius = 1200.0f, bool enableDebug = false);
+	
 	void PlayerAttack();
 
 	//Enemy to focus camera or to attack closest to.
@@ -167,11 +167,13 @@ public:
 	void LeftCTRLClickEnd();
 	void LeftMouseClick();
 	void ShiftClick();
+	bool bRightMouseButtonIsPressed = false;
 	void RightMouseClick();
 	void RightMouseClickEnd();
 	virtual void onMoveStarted(const FInputActionValue& Value);
 	virtual void onMoveEnd(const FInputActionValue& Value) override;
-	
+	bool getIsRotationMontPlaying() const;
+
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bIsGliding = false;
@@ -211,7 +213,15 @@ public:
 	void NextDodge();
 
 	void PlayerDodge();
-
+	void UpdateDodgeGlide(float DeltaTime);
+	UFUNCTION(BlueprintCallable)
+	void EndDodgeGlide();
+	UPROPERTY(EditAnywhere, Category = Dodge)
+	UAnimMontage* DodgeGlideStartMontage;
+	UPROPERTY(EditAnywhere, Category = Dodge)
+	float DodgeGlideSpeed = 1200.0;
+	UPROPERTY(EditAnywhere, Category = Dodge)
+	float DodgeGlideLength = 2.0;
 	/*Return whether chracter jumped or not*/
 	UFUNCTION(BlueprintCallable)
 	bool getJumpButtonisPressed();
@@ -235,7 +245,7 @@ public:
 
 	void UpdateHitbox(float deltaTime);
 
-	void AttackHitbox(FName SocketName);
+	void AttackHitbox(FName SocketName,bool bEnableDebug = false);
 	
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* HitReactionMontage;
@@ -263,6 +273,16 @@ private:
 	UPROPERTY(EditAnywhere, Category = Combat)
 	TMap<UAnimMontage*, FString> AttackMontageMap;
 
+	bool bPlayerCanParry = false;
+
+	//Chainmap sequence for block Or parrying
+	UPROPERTY(EditAnywhere, Category = Combat)
+	TMap<UAnimMontage*, UAnimMontage*> BlockParryChainMap;
+
+	//Makesure for FName to seperate by ','
+	UPROPERTY(EditAnywhere, Category = Combat)
+	TArray<UAnimMontage*> BlockReactArray;
+
 	//The minimum distance to stop attack rush
 	UPROPERTY(EditAnywhere, Category = Combat)
 	float attackRushMinimumDistance = 100;
@@ -271,7 +291,8 @@ private:
 	void AttackRushEnd(UAnimMontage* animMontage, bool bInterrupted);
 	UPROPERTY(EditAnywhere, Category = Combat)
 	UAnimMontage* AttackRushMontage;
-
+	UPROPERTY(EditAnywhere, Category = Combat)
+	bool bEnableAttackRush = true;
 	UPROPERTY(EditAnywhere, Category = Combat)
 	TMap<UAnimMontage*, FString> FreeflowAttackMontageMap;
 
@@ -315,5 +336,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly)
 	EUpperArmState UpperArmState = EUpperArmState::LAS_Normal;
+
+
+	UFUNCTION(BlueprintCallable)
+	EDemonMovementState GetMovementState() { return MovementState; }
 
 };
